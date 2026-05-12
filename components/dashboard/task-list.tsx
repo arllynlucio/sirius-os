@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useAppStore, type TaskType } from "@/lib/store"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,33 +25,119 @@ import { Plus, CheckCircle2, Circle, Trash2, ListTodo } from "lucide-react"
 
 const emojiOptions = ["📚", "🏃", "💻", "🧘", "💼", "🎯", "✍️", "🎨", "📞", "🛒", "🏠", "💪"]
 
-export function TaskList() {
-  const todayRecord = useAppStore((state) => state.todayRecord)
-  const addTask = useAppStore((state) => state.addTask)
-  const toggleTask = useAppStore((state) => state.toggleTask)
-  const deleteTask = useAppStore((state) => state.deleteTask)
+type Task = {
+  id: string
+  title: string
+  emoji: string
+  type: "single" | "routine"
+  completed: boolean
+}
 
+export function TaskList() {
+  const [tasks, setTasks] = useState<Task[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [newTaskEmoji, setNewTaskEmoji] = useState("📚")
   const [newTaskTitle, setNewTaskTitle] = useState("")
-  const [newTaskType, setNewTaskType] = useState<TaskType>("single")
+  const [newTaskType, setNewTaskType] = useState<"single" | "routine">("single")
 
-  const tasks = todayRecord?.tasks || []
   const completedCount = tasks.filter((t) => t.completed).length
 
-  const handleAddTask = () => {
+  const loadTasks = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+const today = new Date().toISOString().split("T")[0]
+
+const { data } = await supabase
+  .from("tasks")
+  .select("*")
+  .eq("user_id", user.id)
+  .eq("date", today)
+  .order("created_at", { ascending: false })
+
+    if (data) {
+      setTasks(data as Task[])
+    }
+  }
+
+  useEffect(() => {
+    loadTasks()
+  }, [])
+
+  const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return
 
-    addTask({
-      emoji: newTaskEmoji,
-      title: newTaskTitle.trim(),
-      type: newTaskType,
-    })
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const today = new Date().toISOString().split("T")[0]
+
+await supabase.from("tasks").insert({
+  user_id: user.id,
+  title: newTaskTitle.trim(),
+  emoji: newTaskEmoji,
+  type: newTaskType,
+  completed: false,
+  date: today,
+})
 
     setNewTaskTitle("")
     setNewTaskEmoji("📚")
     setNewTaskType("single")
     setIsOpen(false)
+
+    loadTasks()
+  }
+
+  const toggleTask = async (taskId: string, currentStatus: boolean) => {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return
+
+  const today = new Date().toISOString().split("T")[0]
+
+  await supabase
+    .from("tasks")
+    .update({
+      completed: !currentStatus,
+    })
+    .eq("id", taskId)
+
+  const { data: updatedTasks } = await supabase
+    .from("tasks")
+    .select("completed")
+    .eq("user_id", user.id)
+    .eq("date", today)
+
+  const completedCount =
+    updatedTasks?.filter((task) => task.completed).length || 0
+
+  await supabase
+    .from("checkins")
+    .update({
+      completed_tasks: completedCount,
+    })
+    .eq("user_id", user.id)
+    .eq("checkin_date", today)
+
+  loadTasks()
+}
+
+  const deleteTask = async (taskId: string) => {
+    await supabase
+      .from("tasks")
+      .delete()
+      .eq("id", taskId)
+
+    loadTasks()
   }
 
   return (
@@ -67,29 +153,28 @@ export function TaskList() {
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90">
+            <Button size="sm">
               <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Adicionar</span>
+              Adicionar
             </Button>
           </DialogTrigger>
-          <DialogContent className="border-border bg-card sm:max-w-md">
+
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle className="text-foreground">Nova tarefa</DialogTitle>
+              <DialogTitle>Nova tarefa</DialogTitle>
             </DialogHeader>
+
             <div className="space-y-4 py-4">
-              {/* Emoji Selector */}
-              <div className="space-y-2">
-                <Label className="text-foreground">Ícone</Label>
-                <div className="flex flex-wrap gap-2">
+              <div>
+                <Label>Ícone</Label>
+                <div className="flex flex-wrap gap-2 mt-2">
                   {emojiOptions.map((emoji) => (
                     <button
                       key={emoji}
                       onClick={() => setNewTaskEmoji(emoji)}
                       className={cn(
-                        "flex h-10 w-10 items-center justify-center rounded-xl text-xl transition-all",
-                        newTaskEmoji === emoji
-                          ? "bg-primary ring-2 ring-primary ring-offset-2 ring-offset-card"
-                          : "bg-background hover:bg-background/80"
+                        "h-10 w-10 rounded-lg text-xl",
+                        newTaskEmoji === emoji ? "bg-primary" : "bg-muted"
                       )}
                     >
                       {emoji}
@@ -98,97 +183,68 @@ export function TaskList() {
                 </div>
               </div>
 
-              {/* Task Title */}
-              <div className="space-y-2">
-                <Label htmlFor="task-title" className="text-foreground">
-                  Nome da tarefa
-                </Label>
+              <div>
+                <Label>Nome da tarefa</Label>
                 <Input
-                  id="task-title"
-                  placeholder="Ex: Reunião com equipe"
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
-                  className="border-border bg-background text-foreground"
-                  onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
                 />
               </div>
 
-              {/* Task Type */}
-              <div className="space-y-2">
-                <Label className="text-foreground">Tipo</Label>
-                <Select value={newTaskType} onValueChange={(v) => setNewTaskType(v as TaskType)}>
-                  <SelectTrigger className="border-border bg-background text-foreground">
+              <div>
+                <Label>Tipo</Label>
+                <Select value={newTaskType} onValueChange={(v) => setNewTaskType(v as any)}>
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-border bg-card">
-                    <SelectItem value="single">Único (apenas hoje)</SelectItem>
-                    <SelectItem value="routine">Rotina (todos os dias)</SelectItem>
+                  <SelectContent>
+                    <SelectItem value="single">Único</SelectItem>
+                    <SelectItem value="routine">Rotina</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <Button
-                onClick={handleAddTask}
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                disabled={!newTaskTitle.trim()}
-              >
+              <Button onClick={handleAddTask} className="w-full">
                 Adicionar tarefa
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </CardHeader>
+
       <CardContent className="space-y-2">
-        {tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <ListTodo className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">Nenhuma tarefa ainda</p>
-            <p className="text-xs text-muted-foreground">Adicione tarefas para organizar seu dia</p>
-          </div>
-        ) : (
-          tasks.map((task) => (
-            <div
-              key={task.id}
+        {tasks.map((task) => (
+          <div
+            key={task.id}
+            className={cn(
+              "group flex items-center gap-3 rounded-xl bg-background/50 p-3",
+              task.completed && "opacity-60"
+            )}
+          >
+            <button onClick={() => toggleTask(task.id, task.completed)}>
+              {task.completed ? (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              ) : (
+                <Circle className="h-5 w-5" />
+              )}
+            </button>
+
+            <span className="text-xl">{task.emoji}</span>
+
+            <span
               className={cn(
-                "group flex items-center gap-3 rounded-xl bg-background/50 p-3 transition-all duration-200",
-                task.completed && "opacity-60"
+                "flex-1 text-sm",
+                task.completed && "line-through"
               )}
             >
-              <button
-                onClick={() => toggleTask(task.id)}
-                className="flex-shrink-0 transition-transform hover:scale-110"
-              >
-                {task.completed ? (
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground hover:text-primary" />
-                )}
-              </button>
-              <span className="text-xl">{task.emoji}</span>
-              <span
-                className={cn(
-                  "flex-1 text-sm text-foreground transition-all",
-                  task.completed && "line-through text-muted-foreground"
-                )}
-              >
-                {task.title}
-              </span>
-              {task.type === "routine" && (
-                <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary sm:inline">
-                  Rotina
-                </span>
-              )}
-              <button
-                onClick={() => deleteTask(task.id)}
-                className="flex-shrink-0 text-muted-foreground opacity-0 transition-all hover:text-destructive group-hover:opacity-100"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))
-        )}
+              {task.title}
+            </span>
+
+            <button onClick={() => deleteTask(task.id)}>
+              <Trash2 className="h-4 w-4 text-red-500" />
+            </button>
+          </div>
+        ))}
       </CardContent>
     </Card>
   )

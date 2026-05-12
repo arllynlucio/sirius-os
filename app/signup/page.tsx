@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sparkles, ArrowLeft, Eye, EyeOff, Check } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 export default function SignupPage() {
   const router = useRouter()
@@ -23,15 +24,29 @@ export default function SignupPage() {
     { label: "Um número", met: /[0-9]/.test(password) },
   ]
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    
-    // Simulate signup
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    router.push("/dashboard")
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setIsLoading(true)
+
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        name: name,
+      },
+    },
+  })
+
+  if (error) {
+    alert(error.message)
+    setIsLoading(false)
+    return
   }
+
+  alert("Conta criada com sucesso! Verifique seu email.")
+  router.push("/login")
+}
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-background px-4 py-8">

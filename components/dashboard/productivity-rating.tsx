@@ -1,18 +1,13 @@
 "use client"
 
-import { useAppStore, type ProductivityRating as ProductivityRatingType } from "@/lib/store"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { BarChart3 } from "lucide-react"
 import { toast } from "sonner"
 
-const productivityOptions: {
-  value: ProductivityRatingType
-  emoji: string
-  label: string
-  description: string
-  color: string
-}[] = [
+const productivityOptions = [
   {
     value: "weak",
     emoji: "📉",
@@ -28,7 +23,7 @@ const productivityOptions: {
     color: "bg-warning text-warning-foreground",
   },
   {
-    value: "productive",
+    value: "great",
     emoji: "🚀",
     label: "Muito produtivo",
     description: "Dia incrível",
@@ -37,20 +32,118 @@ const productivityOptions: {
 ]
 
 export function ProductivityRating() {
-  const todayRecord = useAppStore((state) => state.todayRecord)
-  const setTodayProductivity = useAppStore((state) => state.setTodayProductivity)
+  const [selectedProductivity, setSelectedProductivity] = useState<string | null>(null)
 
-  const selectedProductivity = todayRecord?.productivity
+  useEffect(() => {
+    loadToday()
+  }, [])
 
-  const handleSelect = (value: ProductivityRatingType) => {
-    setTodayProductivity(value)
-    
-    if (value === "productive") {
-      toast.success("Parabéns pelo dia produtivo! Continue assim!")
-    } else if (value === "normal") {
-      toast("Dia registrado! Amanhã será melhor ainda.")
+  const loadToday = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const today = new Date().toISOString().split("T")[0]
+
+    const { data } = await supabase
+      .from("checkins")
+      .select("productivity")
+      .eq("user_id", user.id)
+      .eq("checkin_date", today)
+      .maybeSingle()
+
+    if (data?.productivity) {
+      setSelectedProductivity(data.productivity)
+    }
+  }
+
+  const updateStreak = async (userId: string) => {
+  const today = new Date()
+  const todayString = today.toISOString().split("T")[0]
+
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+  const yesterdayString = yesterday.toISOString().split("T")[0]
+
+  const { data: streakData } = await supabase
+    .from("streaks")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  const { data: yesterdayCheckin } = await supabase
+    .from("checkins")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("checkin_date", yesterdayString)
+    .maybeSingle()
+
+  if (!streakData) {
+    await supabase.from("streaks").insert({
+      user_id: userId,
+      current_streak: 1,
+    })
+    return
+  }
+
+  if (yesterdayCheckin) {
+    await supabase
+      .from("streaks")
+      .update({
+        current_streak: streakData.current_streak + 1,
+      })
+      .eq("user_id", userId)
+  } else {
+    await supabase
+      .from("streaks")
+      .update({
+        current_streak: 1,
+      })
+      .eq("user_id", userId)
+  }
+}
+
+  const handleSelect = async (value: string) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const today = new Date().toISOString().split("T")[0]
+
+    const { data: existingCheckin } = await supabase
+      .from("checkins")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("checkin_date", today)
+      .maybeSingle()
+
+    if (existingCheckin) {
+      await supabase
+        .from("checkins")
+        .update({
+          productivity: value,
+        })
+        .eq("id", existingCheckin.id)
     } else {
-      toast("Tudo bem, dias difíceis acontecem. Descanse e volte mais forte!")
+      await supabase
+        .from("checkins")
+        .insert({
+          user_id: user.id,
+          checkin_date: today,
+          productivity: value,
+        })
+
+      await updateStreak(user.id)
+    }
+
+    setSelectedProductivity(value)
+
+    if (value === "great") {
+      toast.success("Parabéns pelo dia incrível!")
     }
   }
 
@@ -62,12 +155,13 @@ export function ProductivityRating() {
           Como foi sua produtividade hoje?
         </CardTitle>
       </CardHeader>
+
       <CardContent>
         <div className="grid grid-cols-3 gap-3">
           {productivityOptions.map((option) => (
             <button
               key={option.value}
-              onClick={() => handleSelect(option.value)}
+             onClick={() => handleSelect(option.value)}
               className={cn(
                 "group flex flex-col items-center gap-2 rounded-2xl p-4 transition-all duration-200",
                 selectedProductivity === option.value
@@ -75,9 +169,7 @@ export function ProductivityRating() {
                   : "bg-background hover:bg-background/80"
               )}
             >
-              <span className="text-3xl transition-transform duration-200 group-hover:scale-110">
-                {option.emoji}
-              </span>
+              <span className="text-3xl">{option.emoji}</span>
               <span className="text-sm font-medium">{option.label}</span>
               <span
                 className={cn(
@@ -92,11 +184,6 @@ export function ProductivityRating() {
             </button>
           ))}
         </div>
-        {selectedProductivity && (
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            Dia registrado! Você pode alterar sua avaliação a qualquer momento.
-          </p>
-        )}
       </CardContent>
     </Card>
   )

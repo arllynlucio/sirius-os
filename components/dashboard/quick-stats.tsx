@@ -1,18 +1,58 @@
 "use client"
 
-import { useAppStore } from "@/lib/store"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
 import { Target, CheckCircle2, Calendar } from "lucide-react"
 
 export function QuickStats() {
-  const todayRecord = useAppStore((state) => state.todayRecord)
-  const goals = useAppStore((state) => state.goals)
-  const history = useAppStore((state) => state.history)
+  const [completedTasks, setCompletedTasks] = useState(0)
+  const [totalTasks, setTotalTasks] = useState(0)
+  const [activeGoals, setActiveGoals] = useState(0)
+  const [productiveDays, setProductiveDays] = useState(0)
 
-  const completedTasks = todayRecord?.tasks.filter((t) => t.completed).length || 0
-  const totalTasks = todayRecord?.tasks.length || 0
-  const activeGoals = goals.length
-  const productiveDays = history.filter((r) => r.productivity === "productive").length
+  useEffect(() => {
+    loadStats()
+  }, [])
+
+  const loadStats = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const today = new Date().toISOString().split("T")[0]
+
+    const { data: tasks } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("date", today)
+
+    const { data: goals } = await supabase
+      .from("goals")
+      .select("*")
+      .eq("user_id", user.id)
+
+    const { data: checkins } = await supabase
+      .from("checkins")
+      .select("*")
+      .eq("user_id", user.id)
+
+    if (tasks) {
+      setTotalTasks(tasks.length)
+      setCompletedTasks(tasks.filter((t) => t.completed).length)
+    }
+
+    if (goals) {
+      setActiveGoals(goals.length)
+    }
+
+    if (checkins) {
+      setProductiveDays(checkins.length)
+    }
+  }
 
   const stats = [
     {
@@ -43,6 +83,7 @@ export function QuickStats() {
             <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.color}`}>
               <stat.icon className="h-5 w-5" />
             </div>
+
             <div>
               <p className="text-2xl font-bold text-foreground">{stat.value}</p>
               <p className="text-xs text-muted-foreground">{stat.label}</p>
