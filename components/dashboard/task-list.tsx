@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,59 +12,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { Plus, CheckCircle2, Circle, Trash2, ListTodo } from "lucide-react"
+import { useState } from "react"
+import type { DashboardTask } from "@/app/(dashboard)/dashboard/page"
 
 const emojiOptions = ["📚", "🏃", "💻", "🧘", "💼", "🎯", "✍️", "🎨", "📞", "🛒", "🏠", "💪"]
 
-type Task = {
-  id: string
-  title: string
-  emoji: string
-  type: "single" | "routine"
-  completed: boolean
+type TaskListProps = {
+  tasks: DashboardTask[]
+  setTasks: React.Dispatch<React.SetStateAction<DashboardTask[]>>
 }
 
-export function TaskList() {
-  const [tasks, setTasks] = useState<Task[]>([])
+export function TaskList({ tasks, setTasks }: TaskListProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [newTaskEmoji, setNewTaskEmoji] = useState("📚")
   const [newTaskTitle, setNewTaskTitle] = useState("")
-  const [newTaskType, setNewTaskType] = useState<"single" | "routine">("single")
 
   const completedCount = tasks.filter((t) => t.completed).length
-
-  const loadTasks = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return
-
-const today = new Date().toISOString().split("T")[0]
-
-const { data } = await supabase
-  .from("tasks")
-  .select("*")
-  .eq("user_id", user.id)
-  .eq("date", today)
-  .order("created_at", { ascending: false })
-
-    if (data) {
-      setTasks(data as Task[])
-    }
-  }
-
-  useEffect(() => {
-    loadTasks()
-  }, [])
+  const getToday = () => new Date().toLocaleDateString("en-CA")
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return
@@ -76,68 +41,76 @@ const { data } = await supabase
 
     if (!user) return
 
-    const today = new Date().toISOString().split("T")[0]
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert({
+        user_id: user.id,
+        title: newTaskTitle.trim(),
+        emoji: newTaskEmoji,
+        type: "single",
+        completed: false,
+        date: getToday(),
+      })
+      .select()
+      .single()
 
-await supabase.from("tasks").insert({
-  user_id: user.id,
-  title: newTaskTitle.trim(),
-  emoji: newTaskEmoji,
-  type: newTaskType,
-  completed: false,
-  date: today,
-})
+    if (error || !data) {
+      console.error(error)
+      return
+    }
+
+    setTasks((prev) => [data as DashboardTask, ...prev])
 
     setNewTaskTitle("")
     setNewTaskEmoji("📚")
-    setNewTaskType("single")
     setIsOpen(false)
-
-    loadTasks()
   }
 
   const toggleTask = async (taskId: string, currentStatus: boolean) => {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    const nextStatus = !currentStatus
 
-  if (!user) return
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId
+          ? { ...task, completed: nextStatus }
+          : task
+      )
+    )
 
-  const today = new Date().toISOString().split("T")[0]
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        completed: nextStatus,
+      })
+      .eq("id", taskId)
 
-  await supabase
-    .from("tasks")
-    .update({
-      completed: !currentStatus,
-    })
-    .eq("id", taskId)
+    if (error) {
+      console.error(error)
 
-  const { data: updatedTasks } = await supabase
-    .from("tasks")
-    .select("completed")
-    .eq("user_id", user.id)
-    .eq("date", today)
-
-  const completedCount =
-    updatedTasks?.filter((task) => task.completed).length || 0
-
-  await supabase
-    .from("checkins")
-    .update({
-      completed_tasks: completedCount,
-    })
-    .eq("user_id", user.id)
-    .eq("checkin_date", today)
-
-  loadTasks()
-}
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === taskId
+            ? { ...task, completed: currentStatus }
+            : task
+        )
+      )
+    }
+  }
 
   const deleteTask = async (taskId: string) => {
-    await supabase
+    const previousTasks = tasks
+
+    setTasks((prev) => prev.filter((task) => task.id !== taskId))
+
+    const { error } = await supabase
       .from("tasks")
       .delete()
       .eq("id", taskId)
 
-    loadTasks()
+    if (error) {
+      console.error(error)
+      setTasks(previousTasks)
+    }
   }
 
   return (
@@ -153,56 +126,40 @@ await supabase.from("tasks").insert({
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button size="sm">
+            <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="h-4 w-4" />
-              Adicionar
+              <span className="hidden sm:inline">Adicionar</span>
             </Button>
           </DialogTrigger>
 
-          <DialogContent>
+          <DialogContent className="border-border bg-card sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Nova tarefa</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4 py-4">
-              <div>
-                <Label>Ícone</Label>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {emojiOptions.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => setNewTaskEmoji(emoji)}
-                      className={cn(
-                        "h-10 w-10 rounded-lg text-xl",
-                        newTaskEmoji === emoji ? "bg-primary" : "bg-muted"
-                      )}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {emojiOptions.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => setNewTaskEmoji(emoji)}
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-xl text-xl",
+                      newTaskEmoji === emoji
+                        ? "bg-primary"
+                        : "bg-background"
+                    )}
+                  >
+                    {emoji}
+                  </button>
+                ))}
               </div>
 
-              <div>
-                <Label>Nome da tarefa</Label>
-                <Input
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <Label>Tipo</Label>
-                <Select value={newTaskType} onValueChange={(v) => setNewTaskType(v as any)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="single">Único</SelectItem>
-                    <SelectItem value="routine">Rotina</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Input
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                placeholder="Nome da tarefa"
+              />
 
               <Button onClick={handleAddTask} className="w-full">
                 Adicionar tarefa
@@ -214,34 +171,23 @@ await supabase.from("tasks").insert({
 
       <CardContent className="space-y-2">
         {tasks.map((task) => (
-          <div
-            key={task.id}
-            className={cn(
-              "group flex items-center gap-3 rounded-xl bg-background/50 p-3",
-              task.completed && "opacity-60"
-            )}
-          >
+          <div key={task.id} className="group flex items-center gap-3 rounded-xl bg-background/50 p-3">
             <button onClick={() => toggleTask(task.id, task.completed)}>
               {task.completed ? (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <CheckCircle2 className="h-5 w-5 text-success" />
               ) : (
-                <Circle className="h-5 w-5" />
+                <Circle className="h-5 w-5 text-muted-foreground" />
               )}
             </button>
 
             <span className="text-xl">{task.emoji}</span>
 
-            <span
-              className={cn(
-                "flex-1 text-sm",
-                task.completed && "line-through"
-              )}
-            >
+            <span className={cn("flex-1", task.completed && "line-through")}>
               {task.title}
             </span>
 
             <button onClick={() => deleteTask(task.id)}>
-              <Trash2 className="h-4 w-4 text-red-500" />
+              <Trash2 className="h-4 w-4 text-destructive" />
             </button>
           </div>
         ))}
