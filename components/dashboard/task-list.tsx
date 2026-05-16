@@ -1,10 +1,12 @@
 "use client"
 
+import { useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { getLocalDate } from "@/lib/date"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -12,12 +14,32 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+
 import { cn } from "@/lib/utils"
-import { Plus, CheckCircle2, Circle, Trash2, ListTodo } from "lucide-react"
-import { useState } from "react"
+import {
+  Plus,
+  CheckCircle2,
+  Circle,
+  Trash2,
+  ListTodo,
+} from "lucide-react"
+
 import type { DashboardTask } from "@/app/(dashboard)/dashboard/page"
 
-const emojiOptions = ["📚", "🏃", "💻", "🧘", "💼", "🎯", "✍️", "🎨", "📞", "🛒", "🏠", "💪"]
+const emojiOptions = [
+  "📚",
+  "🏃",
+  "💻",
+  "🧘",
+  "💼",
+  "🎯",
+  "✍️",
+  "🎨",
+  "📞",
+  "🛒",
+  "🏠",
+  "💪",
+]
 
 type TaskListProps = {
   tasks: DashboardTask[]
@@ -28,9 +50,9 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [newTaskEmoji, setNewTaskEmoji] = useState("📚")
   const [newTaskTitle, setNewTaskTitle] = useState("")
+  const [newTaskType, setNewTaskType] = useState<"single" | "routine">("single")
 
   const completedCount = tasks.filter((t) => t.completed).length
-  const getToday = () => new Date().toLocaleDateString("en-CA")
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return
@@ -47,9 +69,9 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
         user_id: user.id,
         title: newTaskTitle.trim(),
         emoji: newTaskEmoji,
-        type: "single",
+        type: newTaskType,
         completed: false,
-        date: getToday(),
+        date: getLocalDate(),
       })
       .select()
       .single()
@@ -63,6 +85,7 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
 
     setNewTaskTitle("")
     setNewTaskEmoji("📚")
+    setNewTaskType("single")
     setIsOpen(false)
   }
 
@@ -85,8 +108,6 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
       .eq("id", taskId)
 
     if (error) {
-      console.error(error)
-
       setTasks((prev) =>
         prev.map((task) =>
           task.id === taskId
@@ -108,7 +129,6 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
       .eq("id", taskId)
 
     if (error) {
-      console.error(error)
       setTasks(previousTasks)
     }
   }
@@ -126,7 +146,10 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90">
+            <Button
+              size="sm"
+              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline">Adicionar</span>
             </Button>
@@ -134,32 +157,71 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
 
           <DialogContent className="border-border bg-card sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Nova tarefa</DialogTitle>
+<DialogTitle>TESTE SIRIUS NOVA TAREFA</DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
-              <div className="flex flex-wrap gap-2">
-                {emojiOptions.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => setNewTaskEmoji(emoji)}
-                    className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-xl text-xl",
-                      newTaskEmoji === emoji
-                        ? "bg-primary"
-                        : "bg-background"
-                    )}
-                  >
-                    {emoji}
-                  </button>
-                ))}
+            <div className="space-y-5 py-4">
+              <div>
+                <p className="mb-2 text-sm font-medium">Emoji</p>
+                <div className="flex flex-wrap gap-2">
+                  {emojiOptions.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setNewTaskEmoji(emoji)}
+                      className={cn(
+                        "flex h-10 w-10 items-center justify-center rounded-xl text-xl border",
+                        newTaskEmoji === emoji
+                          ? "border-primary bg-primary"
+                          : "border-border bg-background"
+                      )}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <Input
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                placeholder="Nome da tarefa"
-              />
+              <div>
+                <p className="mb-2 text-sm font-medium">Nome da tarefa</p>
+                <Input
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  placeholder="Nome da tarefa"
+                />
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-medium">Tipo da tarefa</p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setNewTaskType("single")}
+                    className={cn(
+                      "rounded-xl border p-3 text-sm font-medium",
+                      newTaskType === "single"
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background"
+                    )}
+                  >
+                    Tarefa única
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewTaskType("routine")}
+                    className={cn(
+                      "rounded-xl border p-3 text-sm font-medium",
+                      newTaskType === "routine"
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background"
+                    )}
+                  >
+                    Rotina diária
+                  </button>
+                </div>
+              </div>
 
               <Button onClick={handleAddTask} className="w-full">
                 Adicionar tarefa
@@ -171,7 +233,10 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
 
       <CardContent className="space-y-2">
         {tasks.map((task) => (
-          <div key={task.id} className="group flex items-center gap-3 rounded-xl bg-background/50 p-3">
+          <div
+            key={task.id}
+            className="group flex items-center gap-3 rounded-xl bg-background/50 p-3"
+          >
             <button onClick={() => toggleTask(task.id, task.completed)}>
               {task.completed ? (
                 <CheckCircle2 className="h-5 w-5 text-success" />
@@ -184,6 +249,9 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
 
             <span className={cn("flex-1", task.completed && "line-through")}>
               {task.title}
+              {task.type === "routine" && (
+                <span className="ml-2 text-xs text-primary">(rotina)</span>
+              )}
             </span>
 
             <button onClick={() => deleteTask(task.id)}>

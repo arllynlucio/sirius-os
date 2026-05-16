@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { getLocalDate } from "@/lib/date"
 
 import { EnergySelector } from "@/components/dashboard/energy-selector"
 import { TaskList } from "@/components/dashboard/task-list"
@@ -20,7 +21,9 @@ export type DashboardTask = {
 
 export default function DashboardPage() {
   const router = useRouter()
+
   const [loading, setLoading] = useState(true)
+  const [currentDate, setCurrentDate] = useState(getLocalDate())
 
   const [tasks, setTasks] = useState<DashboardTask[]>([])
   const [activeGoals, setActiveGoals] = useState(0)
@@ -30,7 +33,17 @@ export default function DashboardPage() {
     checkAuth()
   }, [])
 
-  const getToday = () => new Date().toLocaleDateString("en-CA")
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = getLocalDate()
+
+      if (now !== currentDate) {
+        handleDayChange(now)
+      }
+    }, 60000)
+
+    return () => clearInterval(interval)
+  }, [currentDate])
 
   const checkAuth = async () => {
     const {
@@ -46,6 +59,46 @@ export default function DashboardPage() {
     setLoading(false)
   }
 
+  const handleDayChange = async (newDate: string) => {
+    setCurrentDate(newDate)
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    await regenerateRoutineTasks(user.id, newDate)
+    await loadDashboardData()
+  }
+
+  const regenerateRoutineTasks = async (
+    userId: string,
+    newDate: string
+  ) => {
+    const yesterdayTasksDate = currentDate
+
+    const { data: routineTasks } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("date", yesterdayTasksDate)
+      .eq("type", "routine")
+
+    if (!routineTasks?.length) return
+
+    const routinesToInsert = routineTasks.map((task) => ({
+      user_id: userId,
+      title: task.title,
+      emoji: task.emoji,
+      type: "routine",
+      completed: false,
+      date: newDate,
+    }))
+
+    await supabase.from("tasks").insert(routinesToInsert)
+  }
+
   const loadDashboardData = async () => {
     const {
       data: { user },
@@ -53,11 +106,13 @@ export default function DashboardPage() {
 
     if (!user) return
 
+    const today = getLocalDate()
+
     const { data: tasksData } = await supabase
       .from("tasks")
       .select("*")
       .eq("user_id", user.id)
-      .eq("date", getToday())
+      .eq("date", today)
       .order("created_at", { ascending: false })
 
     const { data: goals } = await supabase

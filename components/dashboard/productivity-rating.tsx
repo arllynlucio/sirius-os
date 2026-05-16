@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import {
+  getLocalDate,
+  getMonthReference,
+  isFirstDayOfMonth,
+} from "@/lib/date"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { BarChart3 } from "lucide-react"
@@ -32,7 +37,8 @@ const productivityOptions = [
 ]
 
 export function ProductivityRating() {
-  const [selectedProductivity, setSelectedProductivity] = useState<string | null>(null)
+  const [selectedProductivity, setSelectedProductivity] =
+    useState<string | null>(null)
 
   useEffect(() => {
     loadToday()
@@ -45,7 +51,7 @@ export function ProductivityRating() {
 
     if (!user) return
 
-    const today = new Date().toISOString().split("T")[0]
+    const today = getLocalDate()
 
     const { data } = await supabase
       .from("checkins")
@@ -56,54 +62,82 @@ export function ProductivityRating() {
 
     if (data?.productivity) {
       setSelectedProductivity(data.productivity)
+    } else {
+      setSelectedProductivity(null)
     }
   }
 
-  const updateStreak = async (userId: string) => {
-  const today = new Date()
-  const todayString = today.toISOString().split("T")[0]
+  const evaluateStreak = async (userId: string) => {
+    const today = getLocalDate()
+    const currentMonth = getMonthReference()
 
-  const yesterday = new Date()
-  yesterday.setDate(today.getDate() - 1)
-  const yesterdayString = yesterday.toISOString().split("T")[0]
-
-  const { data: streakData } = await supabase
-    .from("streaks")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle()
-
-  const { data: yesterdayCheckin } = await supabase
-    .from("checkins")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("checkin_date", yesterdayString)
-    .maybeSingle()
-
-  if (!streakData) {
-    await supabase.from("streaks").insert({
-      user_id: userId,
-      current_streak: 1,
-    })
-    return
-  }
-
-  if (yesterdayCheckin) {
-    await supabase
-      .from("streaks")
-      .update({
-        current_streak: streakData.current_streak + 1,
-      })
+    const { data: tasks } = await supabase
+      .from("tasks")
+      .select("*")
       .eq("user_id", userId)
-  } else {
-    await supabase
+      .eq("date", today)
+
+    const totalTasks = tasks?.length || 0
+    const completedTasks =
+      tasks?.filter((task) => task.completed).length || 0
+
+    if (totalTasks === 0 || completedTasks !== totalTasks) {
+      return
+    }
+
+    const { data: streak } = await supabase
       .from("streaks")
-      .update({
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle()
+
+    if (!streak) {
+      await supabase.from("streaks").insert({
+        user_id: userId,
         current_streak: 1,
+        longest_streak: 1,
+        perfect_days: 1,
+        failed_days: 0,
+        month_reference: currentMonth,
+        last_qualified_date: today,
+      })
+
+      return
+    }
+
+    if (streak.last_qualified_date === today) {
+      return
+    }
+
+    if (streak.month_reference !== currentMonth || isFirstDayOfMonth()) {
+      await supabase
+        .from("streaks")
+        .update({
+          current_streak: 1,
+          longest_streak: Math.max(streak.longest_streak || 0, 1),
+          perfect_days: 1,
+          failed_days: 0,
+          month_reference: currentMonth,
+          last_qualified_date: today,
+        })
+        .eq("user_id", userId)
+
+      return
+    }
+
+    const nextStreak = (streak.current_streak || 0) + 1
+    const nextLongest = Math.max(streak.longest_streak || 0, nextStreak)
+
+    await supabase
+      .from("streaks")
+      .update({
+        current_streak: nextStreak,
+        longest_streak: nextLongest,
+        perfect_days: (streak.perfect_days || 0) + 1,
+        last_qualified_date: today,
       })
       .eq("user_id", userId)
   }
-}
 
   const handleSelect = async (value: string) => {
     const {
@@ -112,7 +146,7 @@ export function ProductivityRating() {
 
     if (!user) return
 
-    const today = new Date().toISOString().split("T")[0]
+    const today = getLocalDate()
 
     const { data: existingCheckin } = await supabase
       .from("checkins")
@@ -136,9 +170,9 @@ export function ProductivityRating() {
           checkin_date: today,
           productivity: value,
         })
-
-      await updateStreak(user.id)
     }
+
+    await evaluateStreak(user.id)
 
     setSelectedProductivity(value)
 
@@ -161,7 +195,7 @@ export function ProductivityRating() {
           {productivityOptions.map((option) => (
             <button
               key={option.value}
-             onClick={() => handleSelect(option.value)}
+              onClick={() => handleSelect(option.value)}
               className={cn(
                 "group flex flex-col items-center gap-2 rounded-2xl p-4 transition-all duration-200",
                 selectedProductivity === option.value
@@ -171,6 +205,7 @@ export function ProductivityRating() {
             >
               <span className="text-3xl">{option.emoji}</span>
               <span className="text-sm font-medium">{option.label}</span>
+
               <span
                 className={cn(
                   "hidden text-xs sm:block",

@@ -2,14 +2,30 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { getLocalDate } from "@/lib/date"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { Zap } from "lucide-react"
 
 const energyOptions = [
-  { value: "low", emoji: "😴", label: "Baixa", description: "Cansado, precisando de energia" },
-  { value: "medium", emoji: "🙂", label: "Média", description: "Normal, estável" },
-  { value: "high", emoji: "⚡", label: "Alta", description: "Energizado, pronto para tudo" },
+  {
+    value: "low",
+    emoji: "😴",
+    label: "Baixa",
+    description: "Cansado, precisando de energia",
+  },
+  {
+    value: "medium",
+    emoji: "🙂",
+    label: "Média",
+    description: "Normal, estável",
+  },
+  {
+    value: "high",
+    emoji: "⚡",
+    label: "Alta",
+    description: "Energizado, pronto para tudo",
+  },
 ]
 
 export function EnergySelector() {
@@ -26,7 +42,7 @@ export function EnergySelector() {
 
     if (!user) return
 
-    const today = new Date().toISOString().split("T")[0]
+    const today = getLocalDate()
 
     const { data } = await supabase
       .from("checkins")
@@ -35,46 +51,48 @@ export function EnergySelector() {
       .eq("checkin_date", today)
       .maybeSingle()
 
-    if (data) {
+    if (data?.energy) {
       setSelectedEnergy(data.energy)
+    } else {
+      setSelectedEnergy(null)
     }
   }
 
- const saveEnergy = async (energy: string) => {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const saveEnergy = async (energy: string) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) return
+    if (!user) return
 
-  const today = new Date().toISOString().split("T")[0]
+    const today = getLocalDate()
 
-  const { data: existingCheckin } = await supabase
-    .from("checkins")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("checkin_date", today)
-    .maybeSingle()
-
-  if (existingCheckin) {
-    await supabase
+    const { data: existingCheckin } = await supabase
       .from("checkins")
-      .update({
-        energy: energy,
-      })
-      .eq("id", existingCheckin.id)
-  } else {
-    await supabase
-      .from("checkins")
-      .insert({
-        user_id: user.id,
-        energy: energy,
-        checkin_date: today,
-      })
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("checkin_date", today)
+      .maybeSingle()
+
+    if (existingCheckin) {
+      await supabase
+        .from("checkins")
+        .update({
+          energy,
+        })
+        .eq("id", existingCheckin.id)
+    } else {
+      await supabase
+        .from("checkins")
+        .insert({
+          user_id: user.id,
+          energy,
+          checkin_date: today,
+        })
+    }
+
+    setSelectedEnergy(energy)
   }
-
-  setSelectedEnergy(energy)
-}
 
   return (
     <Card className="border-border bg-card/50 backdrop-blur-sm">
@@ -102,9 +120,7 @@ export function EnergySelector() {
                 {option.emoji}
               </span>
 
-              <span className="text-sm font-medium">
-                {option.label}
-              </span>
+              <span className="text-sm font-medium">{option.label}</span>
 
               <span
                 className={cn(
