@@ -157,7 +157,7 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
 
           <DialogContent className="border-border bg-card sm:max-w-md">
             <DialogHeader>
-<DialogTitle>TESTE SIRIUS NOVA TAREFA</DialogTitle>
+<DialogTitle>Nova tarefa</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-5 py-4">
