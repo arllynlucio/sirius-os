@@ -5,14 +5,16 @@ import { Flame, LogOut } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import { useDashboard } from "@/components/dashboard/dashboard-context"
 
 export function DashboardHeader() {
   const router = useRouter()
+  const { currentStreak } = useDashboard()
+
   const [userName, setUserName] = useState("Usuário")
 
-  const currentStreak = 0
-
   const today = new Date()
+
   const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
     weekday: "long",
     day: "numeric",
@@ -22,18 +24,23 @@ export function DashboardHeader() {
   const formattedDate = dateFormatter.format(today)
 
   useEffect(() => {
-    const loadUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (user?.user_metadata?.name) {
-        setUserName(user.user_metadata.name)
-      }
-    }
-
     loadUser()
   }, [])
+
+  const loadUser = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const displayName =
+      user.user_metadata?.name ||
+      user.email?.split("@")[0] ||
+      "Usuário"
+
+    setUserName(displayName)
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -42,6 +49,7 @@ export function DashboardHeader() {
 
   const getGreeting = () => {
     const hour = today.getHours()
+
     if (hour < 12) return "Bom dia"
     if (hour < 18) return "Boa tarde"
     return "Boa noite"
@@ -53,14 +61,23 @@ export function DashboardHeader() {
         <h1 className="text-lg font-semibold text-foreground">
           {getGreeting()}, {userName.split(" ")[0]}!
         </h1>
-        <p className="text-sm capitalize text-muted-foreground">{formattedDate}</p>
+
+        <p className="text-sm capitalize text-muted-foreground">
+          {formattedDate}
+        </p>
       </div>
 
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2 rounded-full bg-warning/10 px-4 py-2">
           <Flame className="h-5 w-5 text-warning" />
-          <span className="font-bold text-warning">{currentStreak}</span>
-          <span className="hidden text-sm text-warning/80 sm:inline">dias</span>
+
+          <span className="font-bold text-warning">
+            {currentStreak}
+          </span>
+
+          <span className="hidden text-sm text-warning/80 sm:inline">
+            dias
+          </span>
         </div>
 
         <button

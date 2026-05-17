@@ -12,24 +12,25 @@ const energyOptions = [
     value: "low",
     emoji: "😴",
     label: "Baixa",
-    description: "Cansado, precisando de energia",
+    description: "Cansado",
   },
   {
     value: "medium",
     emoji: "🙂",
     label: "Média",
-    description: "Normal, estável",
+    description: "Estável",
   },
   {
     value: "high",
     emoji: "⚡",
     label: "Alta",
-    description: "Energizado, pronto para tudo",
+    description: "Energizado",
   },
 ]
 
 export function EnergySelector() {
-  const [selectedEnergy, setSelectedEnergy] = useState<string | null>(null)
+  const [selectedEnergy, setSelectedEnergy] =
+    useState<string | null>(null)
 
   useEffect(() => {
     loadTodayCheckin()
@@ -42,20 +43,14 @@ export function EnergySelector() {
 
     if (!user) return
 
-    const today = getLocalDate()
-
     const { data } = await supabase
       .from("checkins")
-      .select("*")
+      .select("energy")
       .eq("user_id", user.id)
-      .eq("checkin_date", today)
+      .eq("checkin_date", getLocalDate())
       .maybeSingle()
 
-    if (data?.energy) {
-      setSelectedEnergy(data.energy)
-    } else {
-      setSelectedEnergy(null)
-    }
+    setSelectedEnergy(data?.energy || null)
   }
 
   const saveEnergy = async (energy: string) => {
@@ -66,6 +61,8 @@ export function EnergySelector() {
     if (!user) return
 
     const today = getLocalDate()
+    const nextValue =
+      selectedEnergy === energy ? null : energy
 
     const { data: existingCheckin } = await supabase
       .from("checkins")
@@ -78,20 +75,20 @@ export function EnergySelector() {
       await supabase
         .from("checkins")
         .update({
-          energy,
+          energy: nextValue,
         })
         .eq("id", existingCheckin.id)
-    } else {
+    } else if (nextValue) {
       await supabase
         .from("checkins")
         .insert({
           user_id: user.id,
-          energy,
           checkin_date: today,
+          energy: nextValue,
         })
     }
 
-    setSelectedEnergy(energy)
+    setSelectedEnergy(nextValue)
   }
 
   return (
@@ -112,21 +109,23 @@ export function EnergySelector() {
               className={cn(
                 "group flex flex-col items-center gap-2 rounded-2xl p-4 transition-all duration-200",
                 selectedEnergy === option.value
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                  ? "bg-primary text-primary-foreground shadow-lg"
                   : "bg-background hover:bg-background/80"
               )}
             >
-              <span className="text-3xl transition-transform duration-200 group-hover:scale-110">
+              <span className="text-3xl">
                 {option.emoji}
               </span>
 
-              <span className="text-sm font-medium">{option.label}</span>
+              <span className="text-sm font-medium">
+                {option.label}
+              </span>
 
               <span
                 className={cn(
                   "hidden text-xs sm:block",
                   selectedEnergy === option.value
-                    ? "text-primary-foreground/80"
+                    ? "opacity-80"
                     : "text-muted-foreground"
                 )}
               >

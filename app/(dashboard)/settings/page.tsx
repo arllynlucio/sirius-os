@@ -4,7 +4,14 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -59,10 +66,18 @@ export default function SettingsPage() {
       .from("profiles")
       .select("*")
       .eq("id", user.id)
-      .single()
+      .maybeSingle()
 
-    if (error || !data) {
-      toast.error("Erro ao carregar perfil")
+    if (!data || error) {
+      const fallbackProfile = {
+        id: user.id,
+        name: user.user_metadata?.name || "Usuário",
+        email: user.email || "",
+      }
+
+      setProfile(fallbackProfile)
+      setName(fallbackProfile.name)
+      setEmail(fallbackProfile.email)
       setLoading(false)
       return
     }
@@ -83,23 +98,25 @@ export default function SettingsPage() {
 
     setSaving(true)
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        name: name.trim(),
-        email: email.trim(),
-      })
-      .eq("id", profile.id)
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({
+          id: profile.id,
+          name: name.trim(),
+          email: email.trim(),
+        })
 
-    setSaving(false)
+      if (error) throw error
 
-    if (error) {
+      toast.success("Perfil atualizado com sucesso")
+      await loadProfile()
+    } catch (error) {
+      console.error(error)
       toast.error("Erro ao salvar perfil")
-      return
+    } finally {
+      setSaving(false)
     }
-
-    toast.success("Perfil atualizado com sucesso")
-    await loadProfile()
   }
 
   const handleChangePassword = async () => {
@@ -113,45 +130,58 @@ export default function SettingsPage() {
       return
     }
 
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    })
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      })
 
-    if (error) {
+      if (error) throw error
+
+      setNewPassword("")
+      toast.success("Senha alterada com sucesso")
+    } catch (error) {
+      console.error(error)
       toast.error("Erro ao alterar senha")
-      return
     }
-
-    setNewPassword("")
-    toast.success("Senha alterada com sucesso")
   }
 
   const handleResetAll = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
     const confirmed = window.confirm(
-      "Tem certeza? Isso apagará TODO o histórico e dados operacionais do SIRIUS."
+      "Tem certeza? Isso apagará TODO o histórico operacional do SIRIUS."
     )
 
-    if (!confirmed || !profile) return
+    if (!confirmed) return
 
     const secondConfirmation = window.confirm(
-      "Confirmação final: essa ação é irreversível. Deseja continuar?"
+      "Confirmação final: essa ação é irreversível."
     )
 
     if (!secondConfirmation) return
 
     setResetting(true)
 
-    await supabase.from("tasks").delete().eq("user_id", profile.id)
-    await supabase.from("goals").delete().eq("user_id", profile.id)
-    await supabase.from("checkins").delete().eq("user_id", profile.id)
-    await supabase.from("streaks").delete().eq("user_id", profile.id)
+    try {
+      await supabase.from("tasks").delete().eq("user_id", user.id)
+      await supabase.from("goals").delete().eq("user_id", user.id)
+      await supabase.from("checkins").delete().eq("user_id", user.id)
+      await supabase.from("streaks").delete().eq("user_id", user.id)
 
-    setResetting(false)
+      toast.success("SIRIUS redefinido com sucesso")
 
-    toast.success("SIRIUS redefinido com sucesso")
-
-    router.push("/dashboard")
-    router.refresh()
+      router.push("/dashboard")
+      router.refresh()
+    } catch (error) {
+      console.error(error)
+      toast.error("Falha ao redefinir dados")
+    } finally {
+      setResetting(false)
+    }
   }
 
   const handleLogout = async () => {
@@ -162,7 +192,9 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-muted-foreground">Carregando configurações...</p>
+        <p className="text-muted-foreground">
+          Carregando configurações...
+        </p>
       </div>
     )
   }
@@ -170,7 +202,10 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          Configurações
+        </h1>
+
         <p className="text-sm text-muted-foreground">
           Gerencie sua conta e preferências do SIRIUS
         </p>
@@ -182,6 +217,7 @@ export default function SettingsPage() {
             <User className="h-5 w-5 text-primary" />
             Perfil
           </CardTitle>
+
           <CardDescription>
             Informações da sua conta
           </CardDescription>
@@ -236,6 +272,7 @@ export default function SettingsPage() {
             <Shield className="h-5 w-5 text-primary" />
             Segurança
           </CardTitle>
+
           <CardDescription>
             Controle de acesso
           </CardDescription>
@@ -271,11 +308,11 @@ export default function SettingsPage() {
           </CardTitle>
 
           <CardDescription>
-            Ações irreversíveis do sistema
+            Ações irreversíveis
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent>
           <Button
             onClick={handleResetAll}
             disabled={resetting}

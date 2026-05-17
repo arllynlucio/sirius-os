@@ -44,9 +44,14 @@ const emojiOptions = [
 type TaskListProps = {
   tasks: DashboardTask[]
   setTasks: React.Dispatch<React.SetStateAction<DashboardTask[]>>
+  onTasksChanged: () => Promise<void>
 }
 
-export function TaskList({ tasks, setTasks }: TaskListProps) {
+export function TaskList({
+  tasks,
+  setTasks,
+  onTasksChanged,
+}: TaskListProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [newTaskEmoji, setNewTaskEmoji] = useState("📚")
   const [newTaskTitle, setNewTaskTitle] = useState("")
@@ -63,7 +68,7 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
 
     if (!user) return
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("tasks")
       .insert({
         user_id: user.id,
@@ -76,10 +81,7 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
       .select()
       .single()
 
-    if (error || !data) {
-      console.error(error)
-      return
-    }
+    if (!data) return
 
     setTasks((prev) => [data as DashboardTask, ...prev])
 
@@ -87,6 +89,8 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
     setNewTaskEmoji("📚")
     setNewTaskType("single")
     setIsOpen(false)
+
+    await onTasksChanged()
   }
 
   const toggleTask = async (taskId: string, currentStatus: boolean) => {
@@ -100,37 +104,25 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
       )
     )
 
-    const { error } = await supabase
+    await supabase
       .from("tasks")
       .update({
         completed: nextStatus,
       })
       .eq("id", taskId)
 
-    if (error) {
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === taskId
-            ? { ...task, completed: currentStatus }
-            : task
-        )
-      )
-    }
+    await onTasksChanged()
   }
 
   const deleteTask = async (taskId: string) => {
-    const previousTasks = tasks
-
     setTasks((prev) => prev.filter((task) => task.id !== taskId))
 
-    const { error } = await supabase
+    await supabase
       .from("tasks")
       .delete()
       .eq("id", taskId)
 
-    if (error) {
-      setTasks(previousTasks)
-    }
+    await onTasksChanged()
   }
 
   return (
@@ -139,6 +131,7 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
         <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
           <ListTodo className="h-5 w-5 text-primary" />
           Tarefas do dia
+
           <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
             {completedCount}/{tasks.length}
           </span>
@@ -146,23 +139,21 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button
-              size="sm"
-              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
-            >
+            <Button size="sm" className="gap-1.5">
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline">Adicionar</span>
             </Button>
           </DialogTrigger>
 
-          <DialogContent className="border-border bg-card sm:max-w-md">
+          <DialogContent className="sm:max-w-md">
             <DialogHeader>
-<DialogTitle>Nova tarefa</DialogTitle>
+              <DialogTitle>Nova tarefa</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-5 py-4">
               <div>
                 <p className="mb-2 text-sm font-medium">Emoji</p>
+
                 <div className="flex flex-wrap gap-2">
                   {emojiOptions.map((emoji) => (
                     <button
@@ -170,7 +161,7 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
                       type="button"
                       onClick={() => setNewTaskEmoji(emoji)}
                       className={cn(
-                        "flex h-10 w-10 items-center justify-center rounded-xl text-xl border",
+                        "flex h-10 w-10 items-center justify-center rounded-xl border text-xl",
                         newTaskEmoji === emoji
                           ? "border-primary bg-primary"
                           : "border-border bg-background"
@@ -182,45 +173,38 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
                 </div>
               </div>
 
-              <div>
-                <p className="mb-2 text-sm font-medium">Nome da tarefa</p>
-                <Input
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Nome da tarefa"
-                />
-              </div>
+              <Input
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                placeholder="Nome da tarefa"
+              />
 
-              <div>
-                <p className="mb-2 text-sm font-medium">Tipo da tarefa</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setNewTaskType("single")}
+                  className={cn(
+                    "rounded-xl border p-3 text-sm font-medium",
+                    newTaskType === "single"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background"
+                  )}
+                >
+                  Tarefa única
+                </button>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setNewTaskType("single")}
-                    className={cn(
-                      "rounded-xl border p-3 text-sm font-medium",
-                      newTaskType === "single"
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background"
-                    )}
-                  >
-                    Tarefa única
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setNewTaskType("routine")}
-                    className={cn(
-                      "rounded-xl border p-3 text-sm font-medium",
-                      newTaskType === "routine"
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background"
-                    )}
-                  >
-                    Rotina diária
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setNewTaskType("routine")}
+                  className={cn(
+                    "rounded-xl border p-3 text-sm font-medium",
+                    newTaskType === "routine"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background"
+                  )}
+                >
+                  Rotina diária
+                </button>
               </div>
 
               <Button onClick={handleAddTask} className="w-full">
@@ -249,6 +233,7 @@ export function TaskList({ tasks, setTasks }: TaskListProps) {
 
             <span className={cn("flex-1", task.completed && "line-through")}>
               {task.title}
+
               {task.type === "routine" && (
                 <span className="ml-2 text-xs text-primary">(rotina)</span>
               )}

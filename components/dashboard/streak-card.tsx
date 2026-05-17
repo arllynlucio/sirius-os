@@ -1,56 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
-import { getMonthReference } from "@/lib/date"
 import { Card, CardContent } from "@/components/ui/card"
 import { Flame, TrendingUp } from "lucide-react"
 
-export function StreakCard() {
-  const [currentStreak, setCurrentStreak] = useState(0)
+type StreakCardProps = {
+  currentStreak: number
+}
 
-  useEffect(() => {
-    loadStreak()
-  }, [])
-
-  const loadStreak = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return
-
-    const currentMonth = getMonthReference()
-
-    const { data } = await supabase
-      .from("streaks")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle()
-
-    if (!data) {
-      setCurrentStreak(0)
-      return
-    }
-
-    if (data.month_reference !== currentMonth) {
-      await supabase
-        .from("streaks")
-        .update({
-          current_streak: 0,
-          perfect_days: 0,
-          failed_days: 0,
-          month_reference: currentMonth,
-        })
-        .eq("user_id", user.id)
-
-      setCurrentStreak(0)
-      return
-    }
-
-    setCurrentStreak(data.current_streak || 0)
-  }
-
+export function StreakCard({ currentStreak }: StreakCardProps) {
   return (
     <Card className="relative overflow-hidden border-warning/20 bg-gradient-to-br from-warning/10 via-card to-card">
       <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-warning/10 blur-2xl" />

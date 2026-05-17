@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
-import { getLocalDate } from "@/lib/date"
+import { getLocalDate, getMonthReference } from "@/lib/date"
+import { useDashboard } from "@/components/dashboard/dashboard-context"
 
 import { EnergySelector } from "@/components/dashboard/energy-selector"
 import { TaskList } from "@/components/dashboard/task-list"
@@ -21,6 +22,8 @@ export type DashboardTask = {
 
 export default function DashboardPage() {
   const router = useRouter()
+
+  const { currentStreak, setCurrentStreak, triggerRefresh } = useDashboard()
 
   const [loading, setLoading] = useState(true)
   const [currentDate, setCurrentDate] = useState(getLocalDate())
@@ -59,6 +62,148 @@ export default function DashboardPage() {
     setLoading(false)
   }
 
+  const evaluateStreak = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const today = getLocalDate()
+    const currentMonth = getMonthReference()
+
+    const { data: tasksData } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("date", today)
+
+    const totalTasks = tasksData?.length || 0
+    const completedTasks =
+      tasksData?.filter((task) => task.completed).length || 0
+
+    const { data: checkin } = await supabase
+      .from("checkins")
+      .select("productivity")
+      .eq("user_id", user.id)
+      .eq("checkin_date", today)
+      .maybeSingle()
+
+    const validDay =
+      totalTasks > 0 &&
+      completedTasks === totalTasks &&
+      checkin?.productivity !== null &&
+      checkin?.productivity !== undefined
+
+    const { data: streak } = await supabase
+      .from("streaks")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    if (!streak) {
+      if (!validDay) {
+        setCurrentStreak(0)
+        triggerRefresh()
+        return
+      }
+
+      await supabase.from("streaks").insert({
+        user_id: user.id,
+        current_streak: 1,
+        longest_streak: 1,
+        perfect_days: 1,
+        failed_days: 0,
+        month_reference: currentMonth,
+        last_qualified_date: today,
+      })
+
+      setCurrentStreak(1)
+      triggerRefresh()
+      return
+    }
+
+    if (streak.month_reference !== currentMonth) {
+      if (!validDay) {
+        await supabase
+          .from("streaks")
+          .update({
+            current_streak: 0,
+            perfect_days: 0,
+            failed_days: 0,
+            month_reference: currentMonth,
+            last_qualified_date: null,
+          })
+          .eq("user_id", user.id)
+
+        setCurrentStreak(0)
+        triggerRefresh()
+        return
+      }
+
+      await supabase
+        .from("streaks")
+        .update({
+          current_streak: 1,
+          longest_streak: streak.longest_streak || 1,
+          perfect_days: 1,
+          failed_days: 0,
+          month_reference: currentMonth,
+          last_qualified_date: today,
+        })
+        .eq("user_id", user.id)
+
+      setCurrentStreak(1)
+      triggerRefresh()
+      return
+    }
+
+    if (!validDay) {
+      if (streak.last_qualified_date === today) {
+        const fallback = Math.max((streak.current_streak || 1) - 1, 0)
+
+        await supabase
+          .from("streaks")
+          .update({
+            current_streak: fallback,
+            perfect_days: Math.max((streak.perfect_days || 1) - 1, 0),
+            last_qualified_date: null,
+          })
+          .eq("user_id", user.id)
+
+        setCurrentStreak(fallback)
+        triggerRefresh()
+        return
+      }
+
+      setCurrentStreak(streak.current_streak || 0)
+      triggerRefresh()
+      return
+    }
+
+    if (streak.last_qualified_date === today) {
+      setCurrentStreak(streak.current_streak || 0)
+      triggerRefresh()
+      return
+    }
+
+    const nextStreak = (streak.current_streak || 0) + 1
+    const nextLongest = Math.max(streak.longest_streak || 0, nextStreak)
+
+    await supabase
+      .from("streaks")
+      .update({
+        current_streak: nextStreak,
+        longest_streak: nextLongest,
+        perfect_days: (streak.perfect_days || 0) + 1,
+        last_qualified_date: today,
+      })
+      .eq("user_id", user.id)
+
+    setCurrentStreak(nextStreak)
+    triggerRefresh()
+  }
+
   const handleDayChange = async (newDate: string) => {
     setCurrentDate(newDate)
 
@@ -76,18 +221,25 @@ export default function DashboardPage() {
     userId: string,
     newDate: string
   ) => {
-    const yesterdayTasksDate = currentDate
-
     const { data: routineTasks } = await supabase
       .from("tasks")
       .select("*")
       .eq("user_id", userId)
-      .eq("date", yesterdayTasksDate)
       .eq("type", "routine")
+      .neq("date", newDate)
 
     if (!routineTasks?.length) return
 
-    const routinesToInsert = routineTasks.map((task) => ({
+    const uniqueTasks = Array.from(
+      new Map(
+        routineTasks.map((task) => [
+          `${task.title}-${task.emoji}`,
+          task,
+        ])
+      ).values()
+    )
+
+    const routinesToInsert = uniqueTasks.map((task) => ({
       user_id: userId,
       title: task.title,
       emoji: task.emoji,
@@ -107,6 +259,7 @@ export default function DashboardPage() {
     if (!user) return
 
     const today = getLocalDate()
+    const currentMonth = getMonthReference()
 
     const { data: tasksData } = await supabase
       .from("tasks")
@@ -125,9 +278,27 @@ export default function DashboardPage() {
       .select("*")
       .eq("user_id", user.id)
 
+    const { data: streak } = await supabase
+      .from("streaks")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
     setTasks((tasksData as DashboardTask[]) || [])
     setActiveGoals(goals?.length || 0)
-    setProductiveDays(checkins?.length || 0)
+  setProductiveDays(
+  checkins?.filter(
+    (checkin) => checkin.productivity !== null
+  ).length || 0
+)
+
+    if (!streak || streak.month_reference !== currentMonth) {
+      setCurrentStreak(0)
+    } else {
+      setCurrentStreak(streak.current_streak || 0)
+    }
+
+    triggerRefresh()
   }
 
   if (loading) {
@@ -140,7 +311,7 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <StreakCard />
+      <StreakCard currentStreak={currentStreak} />
 
       <QuickStats
         completedTasks={tasks.filter((t) => t.completed).length}
@@ -151,9 +322,15 @@ export default function DashboardPage() {
 
       <EnergySelector />
 
-      <TaskList tasks={tasks} setTasks={setTasks} />
+      <TaskList
+        tasks={tasks}
+        setTasks={setTasks}
+        onTasksChanged={evaluateStreak}
+      />
 
-      <ProductivityRating />
+      <ProductivityRating
+        onProductivityChanged={evaluateStreak}
+      />
     </div>
   )
 }
