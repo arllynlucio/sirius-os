@@ -89,6 +89,18 @@ export default function DashboardPage() {
       .eq("checkin_date", today)
       .maybeSingle()
 
+      const { data: allCheckins } = await supabase
+  .from("checkins")
+  .select("productivity")
+  .eq("user_id", user.id)
+
+setProductiveDays(
+  allCheckins?.filter(
+    (item) =>
+      item.productivity &&
+      item.productivity.trim() !== ""
+  ).length || 0
+)
     const validDay =
       totalTasks > 0 &&
       completedTasks === totalTasks &&
