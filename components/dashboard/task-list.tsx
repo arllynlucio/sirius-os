@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 
 import {
   Dialog,
@@ -36,6 +37,9 @@ import {
   Circle,
   Trash2,
   ListTodo,
+  Pencil,
+  Link2,
+  Unlink,
 } from "lucide-react"
 
 import type { DashboardTask } from "@/app/(dashboard)/dashboard/page"
@@ -48,11 +52,11 @@ const emojiOptions = [
   "💼",
   "🎯",
   "✍️",
-  "🎨",
-  "📞",
   "🛒",
   "🏠",
   "💪",
+  "📷",
+  "🔫",
 ]
 
 type TaskListProps = {
@@ -67,13 +71,20 @@ export function TaskList({
   onTasksChanged,
 }: TaskListProps) {
   const { goals, applyTaskLinkProgress } = useGoals()
-  const { createLink } = useGoalLinks()
+  const {
+    createLink,
+    updateLink,
+    deleteLink,
+    getTaskLinks,
+  } = useGoalLinks()
 
   const [isOpen, setIsOpen] = useState(false)
+  const [editingTask, setEditingTask] =
+    useState<DashboardTask | null>(null)
 
-  const [newTaskEmoji, setNewTaskEmoji] = useState("📚")
-  const [newTaskTitle, setNewTaskTitle] = useState("")
-  const [newTaskType, setNewTaskType] =
+  const [taskEmoji, setTaskEmoji] = useState("📚")
+  const [taskTitle, setTaskTitle] = useState("")
+  const [taskType, setTaskType] =
     useState<"single" | "routine">("single")
 
   const [linkGoalEnabled, setLinkGoalEnabled] = useState(false)
@@ -82,8 +93,46 @@ export function TaskList({
 
   const completedCount = tasks.filter((t) => t.completed).length
 
-  const handleAddTask = async () => {
-    if (!newTaskTitle.trim()) return
+  const resetForm = () => {
+    setTaskEmoji("📚")
+    setTaskTitle("")
+    setTaskType("single")
+    setLinkGoalEnabled(false)
+    setSelectedGoalId("")
+    setProgressDelta("1")
+    setEditingTask(null)
+  }
+
+  const getGoalUnit = () => {
+    const goal = goals.find((g) => g.id === selectedGoalId)
+    return goal?.unit || "unidades"
+  }
+
+  const openEdit = (task: DashboardTask) => {
+    const link = getTaskLinks(task.id)[0]
+
+    setEditingTask(task)
+    setTaskEmoji(task.emoji)
+    setTaskTitle(task.title)
+    setTaskType(task.type)
+
+    if (link) {
+      setLinkGoalEnabled(true)
+      setSelectedGoalId(link.goal_id)
+      setProgressDelta(String(link.progress_delta))
+    } else {
+      setLinkGoalEnabled(false)
+      setSelectedGoalId("")
+      setProgressDelta("1")
+    }
+
+    setIsOpen(true)
+  }
+
+  const handleSaveTask = async () => {
+    if (!taskTitle.trim()) return
+
+    if (linkGoalEnabled && !selectedGoalId) return
 
     const {
       data: { user },
@@ -91,45 +140,70 @@ export function TaskList({
 
     if (!user) return
 
-    const { data, error } = await supabase
-      .from("tasks")
-      .insert({
-        user_id: user.id,
-        title: newTaskTitle.trim(),
-        emoji: newTaskEmoji,
-        type: newTaskType,
-        completed: false,
-        date: getLocalDate(),
-      })
-      .select()
-      .single()
+    if (editingTask) {
+      await supabase
+        .from("tasks")
+        .update({
+          title: taskTitle.trim(),
+          emoji: taskEmoji,
+          type: taskType,
+        })
+        .eq("id", editingTask.id)
 
-    if (error || !data) {
-      console.error(error)
-      return
+      const existingLink = getTaskLinks(editingTask.id)[0]
+
+      if (linkGoalEnabled) {
+        if (existingLink) {
+          await updateLink(existingLink.id, {
+            goal_id: selectedGoalId,
+            progress_delta: Number(progressDelta),
+          })
+        } else {
+          await createLink({
+            goal_id: selectedGoalId,
+            task_id: editingTask.id,
+            progress_delta: Number(progressDelta),
+          })
+        }
+      } else if (existingLink) {
+        await deleteLink(existingLink.id)
+      }
+    } else {
+      const { data } = await supabase
+        .from("tasks")
+        .insert({
+          user_id: user.id,
+          title: taskTitle.trim(),
+          emoji: taskEmoji,
+          type: taskType,
+          completed: false,
+          date: getLocalDate(),
+        })
+        .select()
+        .single()
+
+      if (!data) return
+
+      if (linkGoalEnabled) {
+        await createLink({
+          goal_id: selectedGoalId,
+          task_id: data.id,
+          progress_delta: Number(progressDelta),
+        })
+      }
     }
-
-    if (linkGoalEnabled && selectedGoalId) {
-      await createLink({
-        goal_id: selectedGoalId,
-        task_id: data.id,
-        progress_delta: Number(progressDelta),
-      })
-    }
-
-    setTasks((prev) => [data as DashboardTask, ...prev])
-
-    setNewTaskTitle("")
-    setNewTaskEmoji("📚")
-    setNewTaskType("single")
-
-    setLinkGoalEnabled(false)
-    setSelectedGoalId("")
-    setProgressDelta("1")
-
-    setIsOpen(false)
 
     await onTasksChanged()
+    resetForm()
+    setIsOpen(false)
+
+    const { data: tasksData } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("date", getLocalDate())
+      .order("created_at", { ascending: false })
+
+    setTasks((tasksData as DashboardTask[]) || [])
   }
 
   const toggleTask = async (
@@ -146,31 +220,32 @@ export function TaskList({
       )
     )
 
-    const { error } = await supabase
+    await supabase
       .from("tasks")
       .update({
         completed: nextStatus,
       })
       .eq("id", taskId)
 
-    if (error) {
-      console.error("Erro ao atualizar task:", error)
-      return
-    }
-
     await applyTaskLinkProgress(taskId, nextStatus)
     await onTasksChanged()
   }
 
-  const deleteTask = async (taskId: string) => {
-    setTasks((prev) =>
-      prev.filter((task) => task.id !== taskId)
-    )
+  const removeTask = async (taskId: string) => {
+    const existingLink = getTaskLinks(taskId)[0]
+
+    if (existingLink) {
+      await deleteLink(existingLink.id)
+    }
 
     await supabase
       .from("tasks")
       .delete()
       .eq("id", taskId)
+
+    setTasks((prev) =>
+      prev.filter((task) => task.id !== taskId)
+    )
 
     await onTasksChanged()
   }
@@ -187,7 +262,13 @@ export function TaskList({
           </span>
         </CardTitle>
 
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog
+          open={isOpen}
+          onOpenChange={(open) => {
+            setIsOpen(open)
+            if (!open) resetForm()
+          }}
+        >
           <DialogTrigger asChild>
             <Button size="sm" className="gap-1.5">
               <Plus className="h-4 w-4" />
@@ -197,22 +278,24 @@ export function TaskList({
 
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Nova tarefa</DialogTitle>
+              <DialogTitle>
+                {editingTask ? "Editar tarefa" : "Nova tarefa"}
+              </DialogTitle>
             </DialogHeader>
 
             <div className="space-y-5 py-4">
               <div>
-                <p className="mb-2 text-sm font-medium">Emoji</p>
+                <Label>Emoji</Label>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {emojiOptions.map((emoji) => (
                     <button
                       key={emoji}
                       type="button"
-                      onClick={() => setNewTaskEmoji(emoji)}
+                      onClick={() => setTaskEmoji(emoji)}
                       className={cn(
                         "flex h-10 w-10 items-center justify-center rounded-xl border text-xl",
-                        newTaskEmoji === emoji
+                        taskEmoji === emoji
                           ? "border-primary bg-primary"
                           : "border-border bg-background"
                       )}
@@ -224,18 +307,18 @@ export function TaskList({
               </div>
 
               <Input
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
+                value={taskTitle}
+                onChange={(e) => setTaskTitle(e.target.value)}
                 placeholder="Nome da tarefa"
               />
 
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setNewTaskType("single")}
+                  onClick={() => setTaskType("single")}
                   className={cn(
                     "rounded-xl border p-3 text-sm font-medium",
-                    newTaskType === "single"
+                    taskType === "single"
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border"
                   )}
@@ -245,10 +328,10 @@ export function TaskList({
 
                 <button
                   type="button"
-                  onClick={() => setNewTaskType("routine")}
+                  onClick={() => setTaskType("routine")}
                   className={cn(
                     "rounded-xl border p-3 text-sm font-medium",
-                    newTaskType === "routine"
+                    taskType === "routine"
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border"
                   )}
@@ -294,7 +377,7 @@ export function TaskList({
 
                   <div>
                     <Label>
-                      Quanto essa tarefa adiciona?
+                      Quantos {getGoalUnit()}?
                     </Label>
 
                     <Input
@@ -310,10 +393,10 @@ export function TaskList({
               )}
 
               <Button
-                onClick={handleAddTask}
+                onClick={handleSaveTask}
                 className="w-full"
               >
-                Adicionar tarefa
+                {editingTask ? "Salvar alterações" : "Adicionar tarefa"}
               </Button>
             </div>
           </DialogContent>
@@ -321,45 +404,72 @@ export function TaskList({
       </CardHeader>
 
       <CardContent className="space-y-2">
-        {tasks.map((task) => (
-          <div
-            key={task.id}
-            className="group flex items-center gap-3 rounded-xl bg-background/50 p-3"
-          >
-            <button
-              onClick={() =>
-                toggleTask(task.id, task.completed)
-              }
+        {tasks.map((task) => {
+          const link = getTaskLinks(task.id)[0]
+          const linkedGoal = goals.find(
+            (g) => g.id === link?.goal_id
+          )
+
+          return (
+            <div
+              key={task.id}
+              className="rounded-xl bg-background/50 p-3"
             >
-              {task.completed ? (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              ) : (
-                <Circle className="h-5 w-5 text-muted-foreground" />
-              )}
-            </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() =>
+                    toggleTask(task.id, task.completed)
+                  }
+                >
+                  {task.completed ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <Circle className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </button>
 
-            <span className="text-xl">{task.emoji}</span>
+                <span className="text-xl">{task.emoji}</span>
 
-            <span
-              className={cn(
-                "flex-1",
-                task.completed && "line-through opacity-60"
-              )}
-            >
-              {task.title}
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={cn(
+                      task.completed &&
+                        "line-through opacity-60"
+                    )}
+                  >
+                    {task.title}
+                  </p>
 
-              {task.type === "routine" && (
-                <span className="ml-2 text-xs text-primary">
-                  (rotina)
-                </span>
-              )}
-            </span>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {task.type === "routine" && (
+                      <Badge variant="secondary">
+                        rotina
+                      </Badge>
+                    )}
 
-            <button onClick={() => deleteTask(task.id)}>
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </button>
-          </div>
-        ))}
+                    {link && linkedGoal && (
+                      <Badge
+                        variant="outline"
+                        className="gap-1"
+                      >
+                        <Link2 className="h-3 w-3" />
+                        {linkedGoal.title} (+{link.progress_delta})
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <button onClick={() => openEdit(task)}>
+                  <Pencil className="h-4 w-4 text-primary" />
+                </button>
+
+                <button onClick={() => removeTask(task.id)}>
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </button>
+              </div>
+            </div>
+          )
+        })}
       </CardContent>
     </Card>
   )

@@ -9,7 +9,6 @@ import {
 } from "react";
 
 import { supabase } from "@/lib/supabase";
-
 import {
   GoalTaskLink,
   CreateGoalTaskLinkInput,
@@ -18,9 +17,12 @@ import {
 interface GoalLinksContextType {
   links: GoalTaskLink[];
   loading: boolean;
-
   fetchLinks: () => Promise<void>;
   createLink: (data: CreateGoalTaskLinkInput) => Promise<void>;
+  updateLink: (
+    id: string,
+    data: Partial<CreateGoalTaskLinkInput>
+  ) => Promise<void>;
   deleteLink: (id: string) => Promise<void>;
   getTaskLinks: (taskId: string) => GoalTaskLink[];
 }
@@ -58,8 +60,6 @@ export function GoalLinksProvider({
       if (error) throw error;
 
       setLinks((data as GoalTaskLink[]) || []);
-    } catch (error) {
-      console.error("Erro ao buscar vínculos:", error);
     } finally {
       setLoading(false);
     }
@@ -68,46 +68,49 @@ export function GoalLinksProvider({
   async function createLink(
     data: CreateGoalTaskLinkInput
   ) {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      if (!user) {
-        throw new Error("Usuário não autenticado");
-      }
+    if (!user) throw new Error("Usuário não autenticado");
 
-      const { error } = await supabase
-        .from("goal_task_links")
-        .insert({
-          user_id: user.id,
-          goal_id: data.goal_id,
-          task_id: data.task_id,
-          progress_delta: data.progress_delta,
-        });
+    const { error } = await supabase
+      .from("goal_task_links")
+      .insert({
+        user_id: user.id,
+        goal_id: data.goal_id,
+        task_id: data.task_id,
+        progress_delta: data.progress_delta,
+      });
 
-      if (error) throw error;
+    if (error) throw error;
 
-      await fetchLinks();
-    } catch (error) {
-      console.error("Erro ao criar vínculo:", error);
-      throw error;
-    }
+    await fetchLinks();
+  }
+
+  async function updateLink(
+    id: string,
+    data: Partial<CreateGoalTaskLinkInput>
+  ) {
+    const { error } = await supabase
+      .from("goal_task_links")
+      .update(data)
+      .eq("id", id);
+
+    if (error) throw error;
+
+    await fetchLinks();
   }
 
   async function deleteLink(id: string) {
-    try {
-      const { error } = await supabase
-        .from("goal_task_links")
-        .delete()
-        .eq("id", id);
+    const { error } = await supabase
+      .from("goal_task_links")
+      .delete()
+      .eq("id", id);
 
-      if (error) throw error;
+    if (error) throw error;
 
-      await fetchLinks();
-    } catch (error) {
-      console.error("Erro ao remover vínculo:", error);
-    }
+    await fetchLinks();
   }
 
   function getTaskLinks(taskId: string) {
@@ -125,6 +128,7 @@ export function GoalLinksProvider({
         loading,
         fetchLinks,
         createLink,
+        updateLink,
         deleteLink,
         getTaskLinks,
       }}
