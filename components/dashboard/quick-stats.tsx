@@ -38,19 +38,27 @@ export function QuickStats({
   ]
 
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {stats.map((stat, index) => (
-        <Card key={index} className="border-border bg-card/50 backdrop-blur-sm">
-          <CardContent className="flex items-center gap-4 p-4">
+        <Card
+          key={index}
+          className="border-border bg-card/50 backdrop-blur-sm"
+        >
+          <CardContent className="flex items-center gap-4 p-5">
             <div
-              className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.color}`}
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${stat.color}`}
             >
               <stat.icon className="h-5 w-5" />
             </div>
 
-            <div>
-              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
+            <div className="min-w-0">
+              <p className="text-3xl font-bold leading-none text-foreground sm:text-2xl">
+                {stat.value}
+              </p>
+
+              <p className="mt-2 text-sm text-muted-foreground">
+                {stat.label}
+              </p>
             </div>
           </CardContent>
         </Card>
