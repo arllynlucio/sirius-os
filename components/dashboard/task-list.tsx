@@ -3,10 +3,15 @@
 import { useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getLocalDate } from "@/lib/date"
+import { useGoals } from "@/contexts/goals-context"
+import { useGoalLinks } from "@/contexts/goal-links-context"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+
 import {
   Dialog,
   DialogContent,
@@ -15,7 +20,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
 import { cn } from "@/lib/utils"
+
 import {
   Plus,
   CheckCircle2,
@@ -52,10 +66,19 @@ export function TaskList({
   setTasks,
   onTasksChanged,
 }: TaskListProps) {
+  const { goals, applyTaskLinkProgress } = useGoals()
+  const { createLink } = useGoalLinks()
+
   const [isOpen, setIsOpen] = useState(false)
+
   const [newTaskEmoji, setNewTaskEmoji] = useState("📚")
   const [newTaskTitle, setNewTaskTitle] = useState("")
-  const [newTaskType, setNewTaskType] = useState<"single" | "routine">("single")
+  const [newTaskType, setNewTaskType] =
+    useState<"single" | "routine">("single")
+
+  const [linkGoalEnabled, setLinkGoalEnabled] = useState(false)
+  const [selectedGoalId, setSelectedGoalId] = useState("")
+  const [progressDelta, setProgressDelta] = useState("1")
 
   const completedCount = tasks.filter((t) => t.completed).length
 
@@ -68,7 +91,7 @@ export function TaskList({
 
     if (!user) return
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("tasks")
       .insert({
         user_id: user.id,
@@ -81,19 +104,38 @@ export function TaskList({
       .select()
       .single()
 
-    if (!data) return
+    if (error || !data) {
+      console.error(error)
+      return
+    }
+
+    if (linkGoalEnabled && selectedGoalId) {
+      await createLink({
+        goal_id: selectedGoalId,
+        task_id: data.id,
+        progress_delta: Number(progressDelta),
+      })
+    }
 
     setTasks((prev) => [data as DashboardTask, ...prev])
 
     setNewTaskTitle("")
     setNewTaskEmoji("📚")
     setNewTaskType("single")
+
+    setLinkGoalEnabled(false)
+    setSelectedGoalId("")
+    setProgressDelta("1")
+
     setIsOpen(false)
 
     await onTasksChanged()
   }
 
-  const toggleTask = async (taskId: string, currentStatus: boolean) => {
+  const toggleTask = async (
+    taskId: string,
+    currentStatus: boolean
+  ) => {
     const nextStatus = !currentStatus
 
     setTasks((prev) =>
@@ -104,18 +146,26 @@ export function TaskList({
       )
     )
 
-    await supabase
+    const { error } = await supabase
       .from("tasks")
       .update({
         completed: nextStatus,
       })
       .eq("id", taskId)
 
+    if (error) {
+      console.error("Erro ao atualizar task:", error)
+      return
+    }
+
+    await applyTaskLinkProgress(taskId, nextStatus)
     await onTasksChanged()
   }
 
   const deleteTask = async (taskId: string) => {
-    setTasks((prev) => prev.filter((task) => task.id !== taskId))
+    setTasks((prev) =>
+      prev.filter((task) => task.id !== taskId)
+    )
 
     await supabase
       .from("tasks")
@@ -128,11 +178,11 @@ export function TaskList({
   return (
     <Card className="border-border bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-4">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+        <CardTitle className="flex items-center gap-2 text-base font-semibold">
           <ListTodo className="h-5 w-5 text-primary" />
           Tarefas do dia
 
-          <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+          <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">
             {completedCount}/{tasks.length}
           </span>
         </CardTitle>
@@ -187,7 +237,7 @@ export function TaskList({
                     "rounded-xl border p-3 text-sm font-medium",
                     newTaskType === "single"
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background"
+                      : "border-border"
                   )}
                 >
                   Tarefa única
@@ -200,14 +250,69 @@ export function TaskList({
                     "rounded-xl border p-3 text-sm font-medium",
                     newTaskType === "routine"
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background"
+                      : "border-border"
                   )}
                 >
                   Rotina diária
                 </button>
               </div>
 
-              <Button onClick={handleAddTask} className="w-full">
+              <div className="flex items-center justify-between rounded-xl border p-4">
+                <Label>Vincular a uma meta</Label>
+
+                <Switch
+                  checked={linkGoalEnabled}
+                  onCheckedChange={setLinkGoalEnabled}
+                />
+              </div>
+
+              {linkGoalEnabled && (
+                <div className="space-y-4">
+                  <div>
+                    <Label>Selecionar meta</Label>
+
+                    <Select
+                      value={selectedGoalId}
+                      onValueChange={setSelectedGoalId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Escolha uma meta" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {goals.map((goal) => (
+                          <SelectItem
+                            key={goal.id}
+                            value={goal.id}
+                          >
+                            {goal.emoji || "🎯"} {goal.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label>
+                      Quanto essa tarefa adiciona?
+                    </Label>
+
+                    <Input
+                      type="number"
+                      min="1"
+                      value={progressDelta}
+                      onChange={(e) =>
+                        setProgressDelta(e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={handleAddTask}
+                className="w-full"
+              >
                 Adicionar tarefa
               </Button>
             </div>
@@ -221,9 +326,13 @@ export function TaskList({
             key={task.id}
             className="group flex items-center gap-3 rounded-xl bg-background/50 p-3"
           >
-            <button onClick={() => toggleTask(task.id, task.completed)}>
+            <button
+              onClick={() =>
+                toggleTask(task.id, task.completed)
+              }
+            >
               {task.completed ? (
-                <CheckCircle2 className="h-5 w-5 text-success" />
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
               ) : (
                 <Circle className="h-5 w-5 text-muted-foreground" />
               )}
@@ -231,11 +340,18 @@ export function TaskList({
 
             <span className="text-xl">{task.emoji}</span>
 
-            <span className={cn("flex-1", task.completed && "line-through")}>
+            <span
+              className={cn(
+                "flex-1",
+                task.completed && "line-through opacity-60"
+              )}
+            >
               {task.title}
 
               {task.type === "routine" && (
-                <span className="ml-2 text-xs text-primary">(rotina)</span>
+                <span className="ml-2 text-xs text-primary">
+                  (rotina)
+                </span>
               )}
             </span>
 

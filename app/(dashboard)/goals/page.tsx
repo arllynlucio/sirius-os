@@ -1,12 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState } from "react"
+import { useGoals } from "@/contexts/goals-context"
+import { Goal } from "@/types/goals"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+
 import {
   Dialog,
   DialogContent,
@@ -14,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+
 import {
   Select,
   SelectContent,
@@ -21,212 +26,268 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { cn } from "@/lib/utils"
-import { Plus, Target, Calendar, Trash2, Edit2 } from "lucide-react"
-import { toast } from "sonner"
 
-type Goal = {
-  id: string
-  title: string
-  emoji: string
-  type: "monthly" | "yearly"
-  progress: number
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+
+import {
+  Plus,
+  Trash2,
+  Pencil,
+  Calendar,
+  Crown,
+} from "lucide-react"
+
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
+
+const emojiOptions = [
+  "🎯",
+  "📖",
+  "🏋️",
+  "💰",
+  "💼",
+  "🚀",
+  "🎓",
+  "🏠",
+  "❤️",
+  "🌍",
+  "✨",
+  "🔥",
+]
+
+function prioridadeLabel(priority: string) {
+  switch (priority) {
+    case "low":
+      return "Baixa"
+    case "medium":
+      return "Média"
+    case "high":
+      return "Alta"
+    case "critical":
+      return "Crítica"
+    default:
+      return priority
+  }
 }
 
-const emojiOptions = ["🎯", "📖", "🏋️", "💰", "🎨", "💼", "🌍", "🎓", "🏠", "❤️", "🚀", "✨"]
+function acompanhamentoLabel(mode: string) {
+  switch (mode) {
+    case "manual":
+      return "Manual"
+    case "automatic":
+      return "Automático"
+    case "hybrid":
+      return "Híbrido"
+    default:
+      return mode
+  }
+}
 
-function GoalCard({
+function EditGoalDialog({
   goal,
-  refreshGoals,
+  updateGoal,
 }: {
   goal: Goal
-  refreshGoals: () => void
+  updateGoal: any
 }) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [newProgress, setNewProgress] = useState(goal.progress.toString())
+  const [open, setOpen] = useState(false)
 
-  const handleUpdateProgress = async () => {
-    const progress = parseInt(newProgress)
+  const [emoji, setEmoji] = useState(goal.emoji || "🎯")
+  const [title, setTitle] = useState(goal.title)
+  const [targetValue, setTargetValue] = useState(goal.target_value.toString())
+  const [unit, setUnit] = useState(goal.unit)
+  const [priority, setPriority] = useState(goal.priority)
+  const [trackingMode, setTrackingMode] = useState(goal.tracking_mode)
+  const [deadline, setDeadline] = useState(goal.deadline || "")
+  const [isPrimary, setIsPrimary] = useState(goal.is_primary)
 
-    if (isNaN(progress) || progress < 0 || progress > 100) {
-      toast.error("Progresso deve ser entre 0 e 100")
-      return
-    }
+  async function handleSave() {
+    await updateGoal(goal.id, {
+      emoji,
+      title,
+      target_value: Number(targetValue),
+      unit,
+      priority,
+      tracking_mode: trackingMode,
+      deadline: deadline || null,
+      is_primary: isPrimary,
+    })
 
-    await supabase
-      .from("goals")
-      .update({ progress })
-      .eq("id", goal.id)
-
-    refreshGoals()
-    setIsEditing(false)
-
-    if (progress === 100) {
-      toast.success("Parabéns! Meta concluída!")
-    } else {
-      toast.success("Progresso atualizado!")
-    }
-  }
-
-  const handleDelete = async () => {
-    await supabase
-      .from("goals")
-      .delete()
-      .eq("id", goal.id)
-
-    refreshGoals()
-    toast("Meta removida")
+    toast.success("Meta atualizada")
+    setOpen(false)
   }
 
   return (
-    <Card className="group border-border bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/30">
-      <CardContent className="p-4">
-        <div className="mb-3 flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{goal.emoji}</span>
-            <div>
-              <h3 className="font-medium text-foreground">{goal.title}</h3>
-              <p className="text-xs text-muted-foreground">
-                {goal.type === "monthly" ? "Meta mensal" : "Meta anual"}
-              </p>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="icon" variant="outline">
+          <Pencil className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Editar meta</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          <div>
+            <Label>Emoji</Label>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {emojiOptions.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setEmoji(item)}
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-xl border text-xl",
+                    emoji === item
+                      ? "border-primary bg-primary/20"
+                      : "border-border"
+                  )}
+                >
+                  {item}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setIsEditing(true)}
-            >
-              <Edit2 className="h-4 w-4" />
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleDelete}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Progresso</span>
-            <span className="font-medium">{goal.progress}%</span>
+          <div>
+            <Label>Nome</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
 
-          <Progress value={goal.progress} className="h-2" />
-        </div>
-
-        <Dialog open={isEditing} onOpenChange={setIsEditing}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Atualizar progresso</DialogTitle>
-            </DialogHeader>
-
+          <div>
+            <Label>Objetivo</Label>
             <Input
               type="number"
-              min="0"
-              max="100"
-              value={newProgress}
-              onChange={(e) => setNewProgress(e.target.value)}
+              value={targetValue}
+              onChange={(e) => setTargetValue(e.target.value)}
             />
+          </div>
 
-            <Button onClick={handleUpdateProgress}>
-              Salvar
-            </Button>
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
+          <div>
+            <Label>Unidade</Label>
+            <Input value={unit} onChange={(e) => setUnit(e.target.value)} />
+          </div>
+
+          <div>
+            <Label>Prazo</Label>
+            <Input
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <Label>Prioridade</Label>
+            <Select value={priority} onValueChange={setPriority}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Baixa</SelectItem>
+                <SelectItem value="medium">Média</SelectItem>
+                <SelectItem value="high">Alta</SelectItem>
+                <SelectItem value="critical">Crítica</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label>Acompanhamento</Label>
+            <Select value={trackingMode} onValueChange={setTrackingMode}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="automatic">Automático</SelectItem>
+                <SelectItem value="hybrid">Híbrido</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Label>Meta principal</Label>
+            <Switch checked={isPrimary} onCheckedChange={setIsPrimary} />
+          </div>
+
+          <Button className="w-full" onClick={handleSave}>
+            Salvar alterações
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 export default function GoalsPage() {
-  const [goals, setGoals] = useState<Goal[]>([])
+  const {
+    goals,
+    loading,
+    createGoal,
+    deleteGoal,
+    updateGoal,
+    updateManualProgress,
+    setPrimaryGoal,
+  } = useGoals()
+
   const [isOpen, setIsOpen] = useState(false)
-  const [newGoalEmoji, setNewGoalEmoji] = useState("🎯")
-  const [newGoalTitle, setNewGoalTitle] = useState("")
-  const [newGoalType, setNewGoalType] = useState<"monthly" | "yearly">("monthly")
 
-  useEffect(() => {
-    loadGoals()
-  }, [])
+  const [emoji, setEmoji] = useState("🎯")
+  const [title, setTitle] = useState("")
+  const [targetValue, setTargetValue] = useState("")
+  const [unit, setUnit] = useState("páginas")
+  const [priority, setPriority] = useState("medium")
+  const [trackingMode, setTrackingMode] = useState("manual")
+  const [deadline, setDeadline] = useState("")
+  const [isPrimary, setIsPrimary] = useState(false)
 
-  const loadGoals = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  async function handleCreateGoal() {
+    await createGoal({
+      emoji,
+      title,
+      target_value: Number(targetValue),
+      unit,
+      priority,
+      tracking_mode: trackingMode,
+      deadline: deadline || null,
+      is_primary: isPrimary,
+    })
 
-    if (!user) return
+    toast.success("Meta criada")
 
-    const { data } = await supabase
-      .from("goals")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-
-    if (data) {
-      setGoals(data as Goal[])
-    }
-  }
-
-  const handleAddGoal = async () => {
-    if (!newGoalTitle.trim()) return
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return
-
-   console.log("SALVANDO GOAL NO SUPABASE")
-
-const { error } = await supabase.from("goals").insert({
-  user_id: user.id,
-  title: newGoalTitle.trim(),
-  emoji: newGoalEmoji,
-  type: newGoalType,
-  progress: 0,
-})
-
-if (error) {
-  console.error("GOAL ERROR:", error)
-  toast.error(error.message)
-  return
-}
-
-    setNewGoalTitle("")
-    setNewGoalEmoji("🎯")
-    setNewGoalType("monthly")
+    setEmoji("🎯")
+    setTitle("")
+    setTargetValue("")
+    setUnit("páginas")
+    setPriority("medium")
+    setTrackingMode("manual")
+    setDeadline("")
+    setIsPrimary(false)
     setIsOpen(false)
-
-    loadGoals()
-    toast.success("Meta criada!")
   }
 
-  const monthlyGoals = goals.filter((g) => g.type === "monthly")
-  const yearlyGoals = goals.filter((g) => g.type === "yearly")
+  if (loading) return <div className="p-6">Carregando metas...</div>
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto max-w-6xl space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Metas</h1>
+          <h1 className="text-2xl font-bold">Metas</h1>
           <p className="text-sm text-muted-foreground">
-            Acompanhe seu progresso em direção aos seus objetivos
+            Transforme ações em progresso real.
           </p>
         </div>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nova meta
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Criar meta
             </Button>
           </DialogTrigger>
 
@@ -235,54 +296,67 @@ if (error) {
               <DialogTitle>Criar meta</DialogTitle>
             </DialogHeader>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
-                <Label>Ícone</Label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {emojiOptions.map((emoji) => (
+                <Label>Emoji</Label>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {emojiOptions.map((item) => (
                     <button
-                      key={emoji}
-                      onClick={() => setNewGoalEmoji(emoji)}
+                      key={item}
+                      onClick={() => setEmoji(item)}
                       className={cn(
-                        "flex h-10 w-10 items-center justify-center rounded-xl text-xl",
-                        newGoalEmoji === emoji
-                          ? "bg-primary"
-                          : "bg-background"
+                        "flex h-10 w-10 items-center justify-center rounded-xl border text-xl",
+                        emoji === item
+                          ? "border-primary bg-primary/20"
+                          : "border-border"
                       )}
                     >
-                      {emoji}
+                      {item}
                     </button>
                   ))}
                 </div>
               </div>
 
+              <Input placeholder="Nome da meta" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Input type="number" placeholder="Objetivo" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} />
+              <Input placeholder="Unidade" value={unit} onChange={(e) => setUnit(e.target.value)} />
+
               <div>
-                <Label>Título</Label>
-                <Input
-                  value={newGoalTitle}
-                  onChange={(e) => setNewGoalTitle(e.target.value)}
-                />
+                <Label>Prazo</Label>
+                <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
               </div>
 
               <div>
-                <Label>Tipo</Label>
-                <Select
-                  value={newGoalType}
-                  onValueChange={(v) =>
-                    setNewGoalType(v as "monthly" | "yearly")
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Label>Prioridade</Label>
+                <Select value={priority} onValueChange={setPriority}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="monthly">Meta mensal</SelectItem>
-                    <SelectItem value="yearly">Meta anual</SelectItem>
+                    <SelectItem value="low">Baixa</SelectItem>
+                    <SelectItem value="medium">Média</SelectItem>
+                    <SelectItem value="high">Alta</SelectItem>
+                    <SelectItem value="critical">Crítica</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <Button className="w-full" onClick={handleAddGoal}>
+              <div>
+                <Label>Acompanhamento</Label>
+                <Select value={trackingMode} onValueChange={setTrackingMode}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="automatic">Automático</SelectItem>
+                    <SelectItem value="hybrid">Híbrido</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <Label>Meta principal</Label>
+                <Switch checked={isPrimary} onCheckedChange={setIsPrimary} />
+              </div>
+
+              <Button className="w-full" onClick={handleCreateGoal}>
                 Criar meta
               </Button>
             </div>
@@ -290,31 +364,84 @@ if (error) {
         </Dialog>
       </div>
 
-      <section>
-        <div className="mb-4 flex items-center gap-2">
-          <Calendar className="h-5 w-5" />
-          <h2 className="text-lg font-semibold">Metas Mensais</h2>
-        </div>
+      <div className="grid gap-5 md:grid-cols-2">
+        {goals.map((goal) => {
+          const progress = (goal.current_value / goal.target_value) * 100
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {monthlyGoals.map((goal) => (
-            <GoalCard key={goal.id} goal={goal} refreshGoals={loadGoals} />
-          ))}
-        </div>
-      </section>
+          return (
+            <Card
+              key={goal.id}
+              className={goal.is_primary ? "border-primary shadow-lg" : ""}
+            >
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <span className="text-2xl">{goal.emoji || "🎯"}</span>
+                    {goal.title}
+                  </CardTitle>
 
-      <section>
-        <div className="mb-4 flex items-center gap-2">
-          <Target className="h-5 w-5" />
-          <h2 className="text-lg font-semibold">Metas Anuais</h2>
-        </div>
+                  <div className="flex gap-2">
+                    <EditGoalDialog goal={goal} updateGoal={updateGoal} />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {yearlyGoals.map((goal) => (
-            <GoalCard key={goal.id} goal={goal} refreshGoals={loadGoals} />
-          ))}
-        </div>
-      </section>
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      onClick={() => deleteGoal(goal.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-5">
+                <p>
+                  {goal.current_value} / {goal.target_value} {goal.unit}
+                </p>
+
+                <Progress value={Math.min(progress, 100)} />
+
+                <div className="flex flex-wrap gap-2">
+                  <Badge>{prioridadeLabel(goal.priority)}</Badge>
+
+                  <Badge variant="secondary">
+                    {acompanhamentoLabel(goal.tracking_mode)}
+                  </Badge>
+
+                  {goal.deadline && (
+                    <Badge variant="outline">
+                      <Calendar className="mr-1 h-3 w-3" />
+                      {goal.deadline}
+                    </Badge>
+                  )}
+
+                  {goal.is_primary && (
+                    <Badge>
+                      <Crown className="mr-1 h-3 w-3" />
+                      Principal
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  {!goal.is_primary && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setPrimaryGoal(goal.id)}
+                    >
+                      Tornar principal
+                    </Button>
+                  )}
+
+                  <Button variant="outline" onClick={() => updateManualProgress(goal.id, 1)}>+1</Button>
+                  <Button variant="outline" onClick={() => updateManualProgress(goal.id, 5)}>+5</Button>
+                  <Button variant="outline" onClick={() => updateManualProgress(goal.id, 10)}>+10</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
     </div>
   )
 }

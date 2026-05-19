@@ -2,18 +2,27 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/sonner'
+import { GoalsProvider } from '@/contexts/goals-context'
 import './globals.css'
 
-const inter = Inter({ 
-  subsets: ["latin"],
-  variable: '--font-inter'
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
 })
 
 export const metadata: Metadata = {
   title: 'SIRIUS OS - Seu Sistema Operacional de Gestão Pessoal',
-  description: 'Check-ins diários, metas e evolução em um único lugar. O sistema operacional pessoal para produtividade e gestão de vida.',
+  description:
+    'Check-ins diários, metas e evolução em um único lugar. O sistema operacional pessoal para produtividade e gestão de vida.',
   generator: 'v0.app',
-  keywords: ['produtividade', 'gestão pessoal', 'metas', 'check-in', 'streaks', 'tarefas'],
+  keywords: [
+    'produtividade',
+    'gestão pessoal',
+    'metas',
+    'check-in',
+    'streaks',
+    'tarefas',
+  ],
   icons: {
     icon: [
       {
@@ -47,9 +56,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className="bg-background">
       <body className={`${inter.variable} font-sans antialiased`}>
-        {children}
-        <Toaster />
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        <GoalsProvider>
+          {children}
+          <Toaster />
+          {process.env.NODE_ENV === 'production' && <Analytics />}
+        </GoalsProvider>
       </body>
     </html>
   )
