@@ -30,7 +30,40 @@ interface GoalsContextType {
   ) => Promise<void>;
 }
 
-const GoalsContext = createContext<GoalsContextType | undefined>(undefined);
+const GoalsContext = createContext<GoalsContextType | undefined>(
+  undefined
+);
+
+async function registerProgressHistory({
+  userId,
+  goalId,
+  before,
+  after,
+  delta,
+  source,
+}: {
+  userId: string;
+  goalId: string;
+  before: number;
+  after: number;
+  delta: number;
+  source: "manual" | "task_link" | "automatic";
+}) {
+  const { error } = await supabase
+    .from("goal_progress_history")
+    .insert({
+      user_id: userId,
+      goal_id: goalId,
+      progress_before: before,
+      progress_after: after,
+      delta,
+      source,
+    });
+
+  if (error) {
+    console.error("HISTORY ERROR:", error);
+  }
+}
 
 export function GoalsProvider({
   children,
@@ -106,8 +139,12 @@ export function GoalsProvider({
     await fetchGoals();
   }
 
-  async function updateGoal(id: string, data: UpdateGoalInput) {
+  async function updateGoal(
+    id: string,
+    data: UpdateGoalInput
+  ) {
     const goal = goals.find((g) => g.id === id);
+
     if (!goal) return;
 
     if (data.is_primary) {
@@ -122,18 +159,25 @@ export function GoalsProvider({
       .update(data)
       .eq("id", id);
 
-    if (error) console.error(error);
+    if (error) {
+      console.error(error);
+    }
 
     await fetchGoals();
   }
 
   async function deleteGoal(id: string) {
-    await supabase.from("goals").delete().eq("id", id);
+    await supabase
+      .from("goals")
+      .delete()
+      .eq("id", id);
+
     await fetchGoals();
   }
 
   async function setPrimaryGoal(id: string) {
     const goal = goals.find((g) => g.id === id);
+
     if (!goal) return;
 
     await supabase
@@ -149,30 +193,49 @@ export function GoalsProvider({
     await fetchGoals();
   }
 
-  async function updateManualProgress(id: string, delta: number) {
+  async function updateManualProgress(
+    id: string,
+    delta: number
+  ) {
     const goal = goals.find((g) => g.id === id);
+
     if (!goal) return;
 
-    const nextValue = Math.max(goal.current_value + delta, 0);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    await supabase.from("goal_progress_events").insert({
-      goal_id: id,
-      source_type: "manual",
+    if (!user) return;
+
+    const currentValue = Number(goal.current_value);
+    const nextValue = Math.max(
+      currentValue + delta,
+      0
+    );
+
+    await registerProgressHistory({
+      userId: user.id,
+      goalId: goal.id,
+      before: currentValue,
+      after: nextValue,
       delta,
-      event_type: delta >= 0 ? "increment" : "decrement",
+      source: "manual",
     });
 
     await supabase
       .from("goals")
       .update({
         current_value: nextValue,
-        status: nextValue >= goal.target_value ? "completed" : "active",
+        status:
+          nextValue >= goal.target_value
+            ? "completed"
+            : "active",
         completed_at:
           nextValue >= goal.target_value
             ? new Date().toISOString()
             : null,
       })
-      .eq("id", id);
+      .eq("id", goal.id);
 
     await fetchGoals();
   }
@@ -188,31 +251,26 @@ export function GoalsProvider({
 
       if (!user) return;
 
-      const { data: links, error: linksError } = await supabase
-        .from("goal_task_links")
-        .select("*")
-        .eq("task_id", taskId)
-        .eq("user_id", user.id);
+      const { data: links, error: linksError } =
+        await supabase
+          .from("goal_task_links")
+          .select("*")
+          .eq("task_id", taskId)
+          .eq("user_id", user.id);
 
-      if (linksError) {
-        console.error("LINK ERROR:", linksError);
-        return;
-      }
-
-      if (!links?.length) {
-        console.log("SEM LINKS");
+      if (linksError || !links?.length) {
         return;
       }
 
       for (const link of links) {
-        const { data: goal, error: goalError } = await supabase
-          .from("goals")
-          .select("*")
-          .eq("id", link.goal_id)
-          .single();
+        const { data: goal, error: goalError } =
+          await supabase
+            .from("goals")
+            .select("*")
+            .eq("id", link.goal_id)
+            .single();
 
         if (goalError || !goal) {
-          console.error("GOAL ERROR:", goalError);
           continue;
         }
 
@@ -227,28 +285,23 @@ export function GoalsProvider({
           ? Number(link.progress_delta)
           : -Number(link.progress_delta);
 
+        const currentValue = Number(goal.current_value);
+
         const nextValue = Math.max(
-          Number(goal.current_value) + delta,
+          currentValue + delta,
           0
         );
 
-        const { error: eventError } = await supabase
-          .from("goal_progress_events")
-          .insert({
-            goal_id: goal.id,
-            source_type: "task",
-            source_id: taskId,
-            delta,
-            event_type:
-              delta >= 0 ? "increment" : "decrement",
-          });
+        await registerProgressHistory({
+          userId: user.id,
+          goalId: goal.id,
+          before: currentValue,
+          after: nextValue,
+          delta,
+          source: "task_link",
+        });
 
-        if (eventError) {
-          console.error("EVENT ERROR:", eventError);
-          continue;
-        }
-
-        const { error: updateError } = await supabase
+        await supabase
           .from("goals")
           .update({
             current_value: nextValue,
@@ -262,15 +315,14 @@ export function GoalsProvider({
                 : null,
           })
           .eq("id", goal.id);
-
-        if (updateError) {
-          console.error("UPDATE ERROR:", updateError);
-        }
       }
 
       await fetchGoals();
     } catch (error) {
-      console.error("AUTO GOAL ERROR:", error);
+      console.error(
+        "AUTO GOAL PROGRESS ERROR:",
+        error
+      );
     }
   }
 
@@ -301,7 +353,9 @@ export function useGoals() {
   const context = useContext(GoalsContext);
 
   if (!context) {
-    throw new Error("useGoals deve ser usado dentro de GoalsProvider");
+    throw new Error(
+      "useGoals deve ser usado dentro de GoalsProvider"
+    );
   }
 
   return context;
