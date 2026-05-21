@@ -45,6 +45,10 @@ import {
   Target,
   Clock3,
   Brain,
+  Zap,
+  ChevronDown,
+  ChevronUp,
+  Undo2,
 } from "lucide-react"
 
 import { toast } from "sonner"
@@ -57,6 +61,7 @@ type GoalProgressEvent = {
   created_at: string
   source_type: string
   event_type: string
+  source_id?: string | null
 }
 
 type GoalAnalytics = {
@@ -112,6 +117,47 @@ function acompanhamentoLabel(mode: string) {
   }
 }
 
+function formatRelativeDate(dateString: string) {
+  const now = new Date()
+  const date = new Date(dateString)
+
+  const diffMs = now.getTime() - date.getTime()
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffHours < 1) return "agora"
+  if (diffHours < 24) return `há ${diffHours}h`
+  if (diffDays === 1) return "ontem"
+  return `há ${diffDays} dias`
+}
+
+function getEventVisual(event: GoalProgressEvent) {
+  if (event.delta < 0) {
+    return {
+      icon: Undo2,
+      label: "Reversão",
+      className:
+        "bg-red-500/10 text-red-500 border-red-500/20",
+    }
+  }
+
+  if (event.source_type === "task") {
+    return {
+      icon: Zap,
+      label: "Tarefa vinculada",
+      className:
+        "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+    }
+  }
+
+  return {
+    icon: TrendingUp,
+    label: "Manual",
+    className:
+      "bg-green-500/10 text-green-500 border-green-500/20",
+  }
+}
+
 function calcularAnalytics(
   goal: Goal,
   history: GoalProgressEvent[]
@@ -150,7 +196,6 @@ function calcularAnalytics(
 
   const deadlineDate = new Date(`${goal.deadline}T23:59:59`)
   const msPerDay = 1000 * 60 * 60 * 24
-
   const daysRemaining = Math.max(
     Math.ceil(
       (deadlineDate.getTime() - today.getTime()) /
@@ -168,17 +213,17 @@ function calcularAnalytics(
       : remainingValue
 
   if (!history.length) {
-  return {
-    progress,
-    daysRemaining,
-    requiredPerDay,
-    projectedDays: null,
-    status: "coletando",
-    statusLabel: "Coletando dados",
-    statusColor:
-      "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+    return {
+      progress,
+      daysRemaining,
+      requiredPerDay,
+      projectedDays: null,
+      status: "coletando",
+      statusLabel: "Coletando dados",
+      statusColor:
+        "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+    }
   }
-}
 
   const sortedHistory = [...history].sort(
     (a, b) =>
@@ -203,18 +248,18 @@ function calcularAnalytics(
     0
   )
 
- if (totalProgress <= 0) {
-  return {
-    progress,
-    daysRemaining,
-    requiredPerDay,
-    projectedDays: null,
-    status: "coletando",
-    statusLabel: "Coletando dados",
-    statusColor:
-      "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+  if (totalProgress <= 0) {
+    return {
+      progress,
+      daysRemaining,
+      requiredPerDay,
+      projectedDays: null,
+      status: "coletando",
+      statusLabel: "Coletando dados",
+      statusColor:
+        "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+    }
   }
-}
 
   const realPace = totalProgress / daysTracked
 
@@ -269,9 +314,13 @@ function EditGoalDialog({
   )
   const [unit, setUnit] = useState(goal.unit)
   const [priority, setPriority] = useState(goal.priority)
-  const [trackingMode, setTrackingMode] = useState(goal.tracking_mode)
-  const [deadline, setDeadline] = useState(goal.deadline || "")
-  const [isPrimary, setIsPrimary] = useState(goal.is_primary)
+  const [trackingMode, setTrackingMode] =
+    useState(goal.tracking_mode)
+  const [deadline, setDeadline] = useState(
+    goal.deadline || ""
+  )
+  const [isPrimary, setIsPrimary] =
+    useState(goal.is_primary)
 
   async function handleSave() {
     await updateGoal(goal.id, {
@@ -302,8 +351,8 @@ function EditGoalDialog({
           <DialogTitle>Editar meta</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5">
-          <div>
+        <div className="space-y-5"></div>
+                  <div>
             <Label>Emoji</Label>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -325,74 +374,48 @@ function EditGoalDialog({
             </div>
           </div>
 
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Nome da meta"
-          />
-
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
           <Input
             type="number"
             value={targetValue}
             onChange={(e) => setTargetValue(e.target.value)}
-            placeholder="Objetivo"
           />
+          <Input value={unit} onChange={(e) => setUnit(e.target.value)} />
 
           <Input
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-            placeholder="Unidade"
+            type="date"
+            value={deadline}
+            onChange={(e) => setDeadline(e.target.value)}
           />
 
-          <div>
-            <Label>Prazo</Label>
+          <Select value={priority} onValueChange={setPriority}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Baixa</SelectItem>
+              <SelectItem value="medium">Média</SelectItem>
+              <SelectItem value="high">Alta</SelectItem>
+              <SelectItem value="critical">Crítica</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <Input
-              type="date"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label>Prioridade</Label>
-
-            <Select value={priority} onValueChange={setPriority}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="low">Baixa</SelectItem>
-                <SelectItem value="medium">Média</SelectItem>
-                <SelectItem value="high">Alta</SelectItem>
-                <SelectItem value="critical">Crítica</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Acompanhamento</Label>
-
-            <Select
-              value={trackingMode}
-              onValueChange={setTrackingMode}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="manual">Manual</SelectItem>
-                <SelectItem value="automatic">Automático</SelectItem>
-                <SelectItem value="hybrid">Híbrido</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select
+            value={trackingMode}
+            onValueChange={setTrackingMode}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="manual">Manual</SelectItem>
+              <SelectItem value="automatic">Automático</SelectItem>
+              <SelectItem value="hybrid">Híbrido</SelectItem>
+            </SelectContent>
+          </Select>
 
           <div className="flex items-center justify-between">
             <Label>Meta principal</Label>
-
             <Switch
               checked={isPrimary}
               onCheckedChange={setIsPrimary}
@@ -423,6 +446,10 @@ export default function GoalsPage() {
     Record<string, GoalProgressEvent[]>
   >({})
 
+  const [expandedHistory, setExpandedHistory] = useState<
+    Record<string, boolean>
+  >({})
+
   const [isOpen, setIsOpen] = useState(false)
 
   const [emoji, setEmoji] = useState("🎯")
@@ -447,6 +474,7 @@ export default function GoalsPage() {
       .from("goal_progress_events")
       .select("*")
       .in("goal_id", goalIds)
+      .order("created_at", { ascending: false })
 
     const grouped: Record<string, GoalProgressEvent[]> = {}
 
@@ -476,15 +504,6 @@ export default function GoalsPage() {
     })
 
     toast.success("Meta criada")
-
-    setEmoji("🎯")
-    setTitle("")
-    setTargetValue("")
-    setUnit("páginas")
-    setPriority("medium")
-    setTrackingMode("manual")
-    setDeadline("")
-    setIsPrimary(false)
     setIsOpen(false)
   }
 
@@ -494,157 +513,6 @@ export default function GoalsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Metas</h1>
-
-          <p className="text-sm text-muted-foreground">
-            Transforme ações em progresso real.
-          </p>
-        </div>
-
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Criar meta
-            </Button>
-          </DialogTrigger>
-
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Criar meta</DialogTitle>
-            </DialogHeader>
-
-            <div className="space-y-5">
-              <div>
-                <Label>Emoji</Label>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {emojiOptions.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => setEmoji(item)}
-                      className={cn(
-                        "flex h-10 w-10 items-center justify-center rounded-xl border text-xl",
-                        emoji === item
-                          ? "border-primary bg-primary/20"
-                          : "border-border"
-                      )}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Input
-                placeholder="Nome da meta"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-
-              <Input
-                type="number"
-                placeholder="Objetivo"
-                value={targetValue}
-                onChange={(e) =>
-                  setTargetValue(e.target.value)
-                }
-              />
-
-              <Input
-                placeholder="Unidade"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-              />
-
-              <div>
-                <Label>Prazo</Label>
-
-                <Input
-                  type="date"
-                  value={deadline}
-                  onChange={(e) =>
-                    setDeadline(e.target.value)
-                  }
-                />
-              </div>
-
-              <div>
-                <Label>Prioridade</Label>
-
-                <Select
-                  value={priority}
-                  onValueChange={setPriority}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    <SelectItem value="low">
-                      Baixa
-                    </SelectItem>
-                    <SelectItem value="medium">
-                      Média
-                    </SelectItem>
-                    <SelectItem value="high">
-                      Alta
-                    </SelectItem>
-                    <SelectItem value="critical">
-                      Crítica
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label>Acompanhamento</Label>
-
-                <Select
-                  value={trackingMode}
-                  onValueChange={setTrackingMode}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    <SelectItem value="manual">
-                      Manual
-                    </SelectItem>
-                    <SelectItem value="automatic">
-                      Automático
-                    </SelectItem>
-                    <SelectItem value="hybrid">
-                      Híbrido
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Label>Meta principal</Label>
-
-                <Switch
-                  checked={isPrimary}
-                  onCheckedChange={setIsPrimary}
-                />
-              </div>
-
-              <Button
-                className="w-full"
-                onClick={handleCreateGoal}
-              >
-                Criar meta
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
       <div className="grid gap-5 md:grid-cols-2">
         {goals.map((goal) => {
           const analytics = calcularAnalytics(
@@ -652,60 +520,20 @@ export default function GoalsPage() {
             goalHistory[goal.id] || []
           )
 
+          const history = goalHistory[goal.id] || []
+          const expanded = expandedHistory[goal.id]
+          const visibleHistory = expanded
+            ? history.slice(0, 5)
+            : history.slice(0, 3)
+
           return (
-            <Card
-              key={goal.id}
-              className={cn(
-                "border-border bg-card/50 backdrop-blur-sm transition-all",
-                goal.is_primary &&
-                  "border-primary shadow-lg shadow-primary/10"
-              )}
-            >
+            <Card key={goal.id}>
               <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <CardTitle className="flex items-center gap-2">
-                      <span className="text-2xl">
-                        {goal.emoji || "🎯"}
-                      </span>
-
-                      <span>{goal.title}</span>
-                    </CardTitle>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Badge>
-                        {prioridadeLabel(goal.priority)}
-                      </Badge>
-
-                      <Badge variant="secondary">
-                        {acompanhamentoLabel(
-                          goal.tracking_mode
-                        )}
-                      </Badge>
-
-                      {goal.deadline && (
-                        <Badge variant="outline">
-                          <Calendar className="mr-1 h-3 w-3" />
-                          {goal.deadline}
-                        </Badge>
-                      )}
-
-                      {goal.is_primary && (
-                        <Badge>
-                          <Crown className="mr-1 h-3 w-3" />
-                          Principal
-                        </Badge>
-                      )}
-
-                      <Badge
-                        className={analytics.statusColor}
-                        variant="outline"
-                      >
-                        <Brain className="mr-1 h-3 w-3" />
-                        {analytics.statusLabel}
-                      </Badge>
-                    </div>
-                  </div>
+                <div className="flex items-start justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <span>{goal.emoji}</span>
+                    {goal.title}
+                  </CardTitle>
 
                   <div className="flex gap-2">
                     <EditGoalDialog
@@ -716,9 +544,7 @@ export default function GoalsPage() {
                     <Button
                       size="icon"
                       variant="destructive"
-                      onClick={() =>
-                        deleteGoal(goal.id)
-                      }
+                      onClick={() => deleteGoal(goal.id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -727,89 +553,85 @@ export default function GoalsPage() {
               </CardHeader>
 
               <CardContent className="space-y-5">
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      {goal.current_value} /{" "}
-                      {goal.target_value} {goal.unit}
+                <Progress value={analytics.progress} />
+
+                <div className="rounded-xl border p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">
+                      Histórico recente ({history.length})
                     </p>
 
-                    <p className="text-lg font-bold text-primary">
-                      {Math.min(
-                        Math.round(analytics.progress),
-                        100
-                      )}
-                      %
-                    </p>
-                  </div>
-
-                  <Progress
-                    value={Math.min(
-                      Math.round(analytics.progress),
-                      100
+                    {history.length > 3 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setExpandedHistory((prev) => ({
+                            ...prev,
+                            [goal.id]: !expanded,
+                          }))
+                        }
+                      >
+                        {expanded ? (
+                          <>
+                            Ocultar
+                            <ChevronUp className="ml-1 h-4 w-4" />
+                          </>
+                        ) : (
+                          <>
+                            Ver histórico
+                            <ChevronDown className="ml-1 h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
                     )}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border p-3">
-                    <div className="mb-2 flex items-center gap-2">
-                      <Clock3 className="h-4 w-4 text-primary" />
-
-                      <span className="text-xs text-muted-foreground">
-                        Dias restantes
-                      </span>
-                    </div>
-
-                    <p className="text-lg font-bold">
-                      {analytics.daysRemaining !== null
-                        ? analytics.daysRemaining
-                        : "--"}
-                    </p>
                   </div>
 
-                  <div className="rounded-xl border p-3">
-                    <div className="mb-2 flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-primary" />
-
-                      <span className="text-xs text-muted-foreground">
-                        Ritmo necessário
-                      </span>
-                    </div>
-
-                    <p className="text-sm font-bold">
-                      {analytics.requiredPerDay !== null
-                        ? `${analytics.requiredPerDay.toFixed(
-                            1
-                          )} ${goal.unit}/dia`
-                        : "--"}
+                  {!history.length && (
+                    <p className="text-sm text-muted-foreground">
+                      Nenhum evento registrado ainda.
                     </p>
-                  </div>
+                  )}
 
-                  <div className="col-span-2 rounded-xl border p-3">
-                    <div className="mb-2 flex items-center gap-2">
-                      <Target className="h-4 w-4 text-primary" />
+                  {visibleHistory.map((event) => {
+                    const visual = getEventVisual(event)
+                    const Icon = visual.icon
 
-                      <span className="text-xs text-muted-foreground">
-                        Projeção de conclusão
-                      </span>
-                    </div>
+                    return (
+                      <div
+                        key={event.id}
+                        className={cn(
+                          "rounded-xl border p-3",
+                          visual.className
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4" />
+                            <span className="font-medium">
+                              {event.delta > 0 ? "+" : ""}
+                              {event.delta} {goal.unit}
+                            </span>
+                          </div>
 
-                    <p className="text-sm font-bold">
-                      {analytics.projectedDays !== null
-                        ? `${analytics.projectedDays} dias`
-                        : "Sem dados suficientes"}
-                    </p>
-                  </div>
+                          <span className="text-xs opacity-70">
+                            {formatRelativeDate(event.created_at)}
+                          </span>
+                        </div>
+
+                        <p className="mt-1 text-xs opacity-80">
+                          {visual.label}
+                        </p>
+                      </div>
+                    )
+                  })}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   {!goal.is_primary && (
                     <Button
                       variant="outline"
-                      onClick={() =>
-                        setPrimaryGoal(goal.id)
-                      }
+                      onClick={() => setPrimaryGoal(goal.id)}
                     >
                       Tornar principal
                     </Button>
