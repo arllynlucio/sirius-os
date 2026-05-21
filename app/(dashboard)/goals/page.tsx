@@ -168,17 +168,17 @@ function calcularAnalytics(
       : remainingValue
 
   if (!history.length) {
-    return {
-      progress,
-      daysRemaining,
-      requiredPerDay,
-      projectedDays: null,
-      status: "sem-historico",
-      statusLabel: "Sem histórico",
-      statusColor:
-        "bg-muted text-muted-foreground",
-    }
+  return {
+    progress,
+    daysRemaining,
+    requiredPerDay,
+    projectedDays: null,
+    status: "coletando",
+    statusLabel: "Coletando dados",
+    statusColor:
+      "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
   }
+}
 
   const sortedHistory = [...history].sort(
     (a, b) =>
@@ -203,18 +203,18 @@ function calcularAnalytics(
     0
   )
 
-  if (totalProgress <= 0) {
-    return {
-      progress,
-      daysRemaining,
-      requiredPerDay,
-      projectedDays: null,
-      status: "sem-historico",
-      statusLabel: "Sem ritmo",
-      statusColor:
-        "bg-muted text-muted-foreground",
-    }
+ if (totalProgress <= 0) {
+  return {
+    progress,
+    daysRemaining,
+    requiredPerDay,
+    projectedDays: null,
+    status: "coletando",
+    statusLabel: "Coletando dados",
+    statusColor:
+      "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
   }
+}
 
   const realPace = totalProgress / daysTracked
 
