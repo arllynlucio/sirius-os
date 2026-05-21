@@ -339,20 +339,28 @@ function EditGoalDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={setOpen}
+    >
       <DialogTrigger asChild>
-        <Button size="icon" variant="outline">
+        <Button
+          size="icon"
+          variant="outline"
+        >
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Editar meta</DialogTitle>
+          <DialogTitle>
+            Editar meta
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5"></div>
-                  <div>
+        <div className="space-y-5">
+          <div>
             <Label>Emoji</Label>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -360,7 +368,9 @@ function EditGoalDialog({
                 <button
                   key={item}
                   type="button"
-                  onClick={() => setEmoji(item)}
+                  onClick={() =>
+                    setEmoji(item)
+                  }
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-xl border text-xl",
                     emoji === item
@@ -374,55 +384,109 @@ function EditGoalDialog({
             </div>
           </div>
 
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Input
+            value={title}
+            onChange={(e) =>
+              setTitle(e.target.value)
+            }
+            placeholder="Nome da meta"
+          />
+
           <Input
             type="number"
             value={targetValue}
-            onChange={(e) => setTargetValue(e.target.value)}
+            onChange={(e) =>
+              setTargetValue(e.target.value)
+            }
+            placeholder="Objetivo"
           />
-          <Input value={unit} onChange={(e) => setUnit(e.target.value)} />
 
           <Input
-            type="date"
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
+            value={unit}
+            onChange={(e) =>
+              setUnit(e.target.value)
+            }
+            placeholder="Unidade"
           />
 
-          <Select value={priority} onValueChange={setPriority}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Baixa</SelectItem>
-              <SelectItem value="medium">Média</SelectItem>
-              <SelectItem value="high">Alta</SelectItem>
-              <SelectItem value="critical">Crítica</SelectItem>
-            </SelectContent>
-          </Select>
+          <div>
+            <Label>Prazo</Label>
 
-          <Select
-            value={trackingMode}
-            onValueChange={setTrackingMode}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="manual">Manual</SelectItem>
-              <SelectItem value="automatic">Automático</SelectItem>
-              <SelectItem value="hybrid">Híbrido</SelectItem>
-            </SelectContent>
-          </Select>
+            <Input
+              type="date"
+              value={deadline}
+              onChange={(e) =>
+                setDeadline(e.target.value)
+              }
+            />
+          </div>
+
+          <div>
+            <Label>Prioridade</Label>
+
+            <Select
+              value={priority}
+              onValueChange={setPriority}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="low">
+                  Baixa
+                </SelectItem>
+                <SelectItem value="medium">
+                  Média
+                </SelectItem>
+                <SelectItem value="high">
+                  Alta
+                </SelectItem>
+                <SelectItem value="critical">
+                  Crítica
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label>Acompanhamento</Label>
+
+            <Select
+              value={trackingMode}
+              onValueChange={setTrackingMode}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="manual">
+                  Manual
+                </SelectItem>
+                <SelectItem value="automatic">
+                  Automático
+                </SelectItem>
+                <SelectItem value="hybrid">
+                  Híbrido
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="flex items-center justify-between">
             <Label>Meta principal</Label>
+
             <Switch
               checked={isPrimary}
               onCheckedChange={setIsPrimary}
             />
           </div>
 
-          <Button className="w-full" onClick={handleSave}>
+          <Button
+            className="w-full"
+            onClick={handleSave}
+          >
             Salvar alterações
           </Button>
         </div>
