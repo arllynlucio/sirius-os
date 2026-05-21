@@ -72,6 +72,7 @@ export function TaskList({
   onTasksChanged,
 }: TaskListProps) {
   const { goals, applyTaskLinkProgress } = useGoals()
+
   const {
     createLink,
     updateLink,
@@ -80,8 +81,7 @@ export function TaskList({
   } = useGoalLinks()
 
   const [isOpen, setIsOpen] = useState(false)
-  const [editingTask, setEditingTask] =
-    useState<any>(null)
+  const [editingTask, setEditingTask] = useState<any>(null)
 
   const [taskEmoji, setTaskEmoji] = useState("📚")
   const [taskTitle, setTaskTitle] = useState("")
@@ -96,8 +96,10 @@ export function TaskList({
 
   const [linkGoalEnabled, setLinkGoalEnabled] =
     useState(false)
+
   const [selectedGoalId, setSelectedGoalId] =
     useState("")
+
   const [progressDelta, setProgressDelta] =
     useState("1")
 
@@ -142,6 +144,7 @@ export function TaskList({
 
     setScheduledTime(data.scheduled_time || "")
     setReminderEnabled(data.reminder_enabled || false)
+
     setReminderMinutes(
       String(data.reminder_minutes_before || 15)
     )
@@ -217,6 +220,8 @@ export function TaskList({
           reminder_enabled: reminderEnabled,
           reminder_minutes_before:
             Number(reminderMinutes),
+          last_reminder_sent: null,
+          late_reminder_sent: null,
         })
         .select()
         .single()
@@ -316,7 +321,10 @@ export function TaskList({
           open={isOpen}
           onOpenChange={(open) => {
             setIsOpen(open)
-            if (!open) resetForm()
+
+            if (!open) {
+              resetForm()
+            }
           }}
         >
           <DialogTrigger asChild>
@@ -339,6 +347,7 @@ export function TaskList({
                 {emojiOptions.map((emoji) => (
                   <button
                     key={emoji}
+                    type="button"
                     onClick={() =>
                       setTaskEmoji(emoji)
                     }
@@ -364,6 +373,7 @@ export function TaskList({
 
               <div className="grid grid-cols-2 gap-3">
                 <button
+                  type="button"
                   onClick={() =>
                     setTaskType("single")
                   }
@@ -377,6 +387,7 @@ export function TaskList({
                 </button>
 
                 <button
+                  type="button"
                   onClick={() =>
                     setTaskType("routine")
                   }
@@ -483,7 +494,7 @@ export function TaskList({
                           key={goal.id}
                           value={goal.id}
                         >
-                          {goal.emoji}{" "}
+                          {goal.emoji || "🎯"}{" "}
                           {goal.title}
                         </SelectItem>
                       ))}
@@ -518,9 +529,10 @@ export function TaskList({
       </CardHeader>
 
       <CardContent className="space-y-2">
-        {tasks.map((task) => {
+        {tasks.map((task: any) => {
           const link =
             getTaskLinks(task.id)[0]
+
           const linkedGoal = goals.find(
             (g) => g.id === link?.goal_id
           )
@@ -561,26 +573,50 @@ export function TaskList({
                   </p>
 
                   <div className="mt-1 flex flex-wrap gap-2">
-                    {task.type ===
-                      "routine" && (
+                    {task.type === "routine" && (
                       <Badge variant="secondary">
                         rotina
                       </Badge>
                     )}
 
-                    {link &&
-                      linkedGoal && (
-                        <Badge
-                          variant="outline"
-                          className="gap-1"
-                        >
-                          <Link2 className="h-3 w-3" />
-                          {linkedGoal.title} (+
-                          {
-                            link.progress_delta
-                          })
-                        </Badge>
-                      )}
+                    {task.scheduled_time && (
+                      <Badge
+                        variant="outline"
+                        className="gap-1"
+                      >
+                        <Clock className="h-3 w-3" />
+                        {task.scheduled_time.slice(
+                          0,
+                          5
+                        )}
+                      </Badge>
+                    )}
+
+                    {task.reminder_enabled && (
+                      <Badge
+                        variant="outline"
+                        className="gap-1"
+                      >
+                        <Bell className="h-3 w-3" />
+                        {
+                          task.reminder_minutes_before
+                        }{" "}
+                        min
+                      </Badge>
+                    )}
+
+                    {link && linkedGoal && (
+                      <Badge
+                        variant="outline"
+                        className="gap-1"
+                      >
+                        <Link2 className="h-3 w-3" />
+                        {linkedGoal.title} (+
+                        {
+                          link.progress_delta
+                        })
+                      </Badge>
+                    )}
                   </div>
                 </div>
 
