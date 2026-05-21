@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 import { useGoals } from "@/contexts/goals-context"
 import { Goal } from "@/types/goals"
 
@@ -49,6 +50,25 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
+type GoalProgressEvent = {
+  id: string
+  goal_id: string
+  delta: number
+  created_at: string
+  source_type: string
+  event_type: string
+}
+
+type GoalAnalytics = {
+  progress: number
+  daysRemaining: number | null
+  requiredPerDay: number | null
+  projectedDays: number | null
+  status: string
+  statusLabel: string
+  statusColor: string
+}
+
 const emojiOptions = [
   "🎯",
   "📖",
@@ -92,7 +112,10 @@ function acompanhamentoLabel(mode: string) {
   }
 }
 
-function calcularAnalytics(goal: Goal) {
+function calcularAnalytics(
+  goal: Goal,
+  history: GoalProgressEvent[]
+): GoalAnalytics {
   const today = new Date()
 
   const progress =
@@ -125,12 +148,7 @@ function calcularAnalytics(goal: Goal) {
     }
   }
 
-  const deadlineDate = new Date(
-    `${goal.deadline}T23:59:59`
-  )
-
-  const createdDate = new Date(goal.created_at)
-
+  const deadlineDate = new Date(`${goal.deadline}T23:59:59`)
   const msPerDay = 1000 * 60 * 60 * 24
 
   const daysRemaining = Math.max(
@@ -141,14 +159,6 @@ function calcularAnalytics(goal: Goal) {
     0
   )
 
-  const daysSinceCreation = Math.max(
-    Math.ceil(
-      (today.getTime() - createdDate.getTime()) /
-        msPerDay
-    ),
-    1
-  )
-
   const remainingValue =
     goal.target_value - goal.current_value
 
@@ -157,14 +167,60 @@ function calcularAnalytics(goal: Goal) {
       ? remainingValue / daysRemaining
       : remainingValue
 
-  const currentPace =
-    goal.current_value > 0
-      ? goal.current_value / daysSinceCreation
-      : 0
+  if (!history.length) {
+    return {
+      progress,
+      daysRemaining,
+      requiredPerDay,
+      projectedDays: null,
+      status: "sem-historico",
+      statusLabel: "Sem histórico",
+      statusColor:
+        "bg-muted text-muted-foreground",
+    }
+  }
+
+  const sortedHistory = [...history].sort(
+    (a, b) =>
+      new Date(a.created_at).getTime() -
+      new Date(b.created_at).getTime()
+  )
+
+  const firstEventDate = new Date(
+    sortedHistory[0].created_at
+  )
+
+  const daysTracked = Math.max(
+    Math.ceil(
+      (today.getTime() - firstEventDate.getTime()) /
+        msPerDay
+    ),
+    1
+  )
+
+  const totalProgress = sortedHistory.reduce(
+    (sum, item) => sum + Number(item.delta),
+    0
+  )
+
+  if (totalProgress <= 0) {
+    return {
+      progress,
+      daysRemaining,
+      requiredPerDay,
+      projectedDays: null,
+      status: "sem-historico",
+      statusLabel: "Sem ritmo",
+      statusColor:
+        "bg-muted text-muted-foreground",
+    }
+  }
+
+  const realPace = totalProgress / daysTracked
 
   const projectedDays =
-    currentPace > 0
-      ? Math.ceil(remainingValue / currentPace)
+    realPace > 0
+      ? Math.ceil(remainingValue / realPace)
       : null
 
   let status = "atrasado"
@@ -178,9 +234,7 @@ function calcularAnalytics(goal: Goal) {
       statusLabel = "Adiantado"
       statusColor =
         "bg-green-500/10 text-green-500 border-green-500/20"
-    } else if (
-      projectedDays === daysRemaining
-    ) {
+    } else if (projectedDays === daysRemaining) {
       status = "ritmo"
       statusLabel = "No ritmo"
       statusColor =
@@ -208,24 +262,16 @@ function EditGoalDialog({
 }) {
   const [open, setOpen] = useState(false)
 
-  const [emoji, setEmoji] = useState(
-    goal.emoji || "🎯"
-  )
+  const [emoji, setEmoji] = useState(goal.emoji || "🎯")
   const [title, setTitle] = useState(goal.title)
-  const [targetValue, setTargetValue] =
-    useState(goal.target_value.toString())
+  const [targetValue, setTargetValue] = useState(
+    goal.target_value.toString()
+  )
   const [unit, setUnit] = useState(goal.unit)
-  const [priority, setPriority] = useState(
-    goal.priority
-  )
-  const [trackingMode, setTrackingMode] =
-    useState(goal.tracking_mode)
-  const [deadline, setDeadline] = useState(
-    goal.deadline || ""
-  )
-  const [isPrimary, setIsPrimary] = useState(
-    goal.is_primary
-  )
+  const [priority, setPriority] = useState(goal.priority)
+  const [trackingMode, setTrackingMode] = useState(goal.tracking_mode)
+  const [deadline, setDeadline] = useState(goal.deadline || "")
+  const [isPrimary, setIsPrimary] = useState(goal.is_primary)
 
   async function handleSave() {
     await updateGoal(goal.id, {
@@ -244,24 +290,16 @@ function EditGoalDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={setOpen}
-    >
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          size="icon"
-          variant="outline"
-        >
+        <Button size="icon" variant="outline">
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            Editar meta
-          </DialogTitle>
+          <DialogTitle>Editar meta</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5">
@@ -273,9 +311,7 @@ function EditGoalDialog({
                 <button
                   key={item}
                   type="button"
-                  onClick={() =>
-                    setEmoji(item)
-                  }
+                  onClick={() => setEmoji(item)}
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-xl border text-xl",
                     emoji === item
@@ -289,28 +325,22 @@ function EditGoalDialog({
             </div>
           </div>
 
-                  <Input
+          <Input
             value={title}
-            onChange={(e) =>
-              setTitle(e.target.value)
-            }
+            onChange={(e) => setTitle(e.target.value)}
             placeholder="Nome da meta"
           />
 
           <Input
             type="number"
             value={targetValue}
-            onChange={(e) =>
-              setTargetValue(e.target.value)
-            }
+            onChange={(e) => setTargetValue(e.target.value)}
             placeholder="Objetivo"
           />
 
           <Input
             value={unit}
-            onChange={(e) =>
-              setUnit(e.target.value)
-            }
+            onChange={(e) => setUnit(e.target.value)}
             placeholder="Unidade"
           />
 
@@ -320,36 +350,23 @@ function EditGoalDialog({
             <Input
               type="date"
               value={deadline}
-              onChange={(e) =>
-                setDeadline(e.target.value)
-              }
+              onChange={(e) => setDeadline(e.target.value)}
             />
           </div>
 
           <div>
             <Label>Prioridade</Label>
 
-            <Select
-              value={priority}
-              onValueChange={setPriority}
-            >
+            <Select value={priority} onValueChange={setPriority}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
 
               <SelectContent>
-                <SelectItem value="low">
-                  Baixa
-                </SelectItem>
-                <SelectItem value="medium">
-                  Média
-                </SelectItem>
-                <SelectItem value="high">
-                  Alta
-                </SelectItem>
-                <SelectItem value="critical">
-                  Crítica
-                </SelectItem>
+                <SelectItem value="low">Baixa</SelectItem>
+                <SelectItem value="medium">Média</SelectItem>
+                <SelectItem value="high">Alta</SelectItem>
+                <SelectItem value="critical">Crítica</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -366,15 +383,9 @@ function EditGoalDialog({
               </SelectTrigger>
 
               <SelectContent>
-                <SelectItem value="manual">
-                  Manual
-                </SelectItem>
-                <SelectItem value="automatic">
-                  Automático
-                </SelectItem>
-                <SelectItem value="hybrid">
-                  Híbrido
-                </SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="automatic">Automático</SelectItem>
+                <SelectItem value="hybrid">Híbrido</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -388,10 +399,7 @@ function EditGoalDialog({
             />
           </div>
 
-          <Button
-            className="w-full"
-            onClick={handleSave}
-          >
+          <Button className="w-full" onClick={handleSave}>
             Salvar alterações
           </Button>
         </div>
@@ -411,20 +419,49 @@ export default function GoalsPage() {
     setPrimaryGoal,
   } = useGoals()
 
+  const [goalHistory, setGoalHistory] = useState<
+    Record<string, GoalProgressEvent[]>
+  >({})
+
   const [isOpen, setIsOpen] = useState(false)
 
   const [emoji, setEmoji] = useState("🎯")
   const [title, setTitle] = useState("")
-  const [targetValue, setTargetValue] =
-    useState("")
+  const [targetValue, setTargetValue] = useState("")
   const [unit, setUnit] = useState("páginas")
-  const [priority, setPriority] =
-    useState("medium")
-  const [trackingMode, setTrackingMode] =
-    useState("manual")
+  const [priority, setPriority] = useState("medium")
+  const [trackingMode, setTrackingMode] = useState("manual")
   const [deadline, setDeadline] = useState("")
-  const [isPrimary, setIsPrimary] =
-    useState(false)
+  const [isPrimary, setIsPrimary] = useState(false)
+
+  useEffect(() => {
+    loadGoalHistory()
+  }, [goals])
+
+  async function loadGoalHistory() {
+    if (!goals.length) return
+
+    const goalIds = goals.map((goal) => goal.id)
+
+    const { data } = await supabase
+      .from("goal_progress_events")
+      .select("*")
+      .in("goal_id", goalIds)
+
+    const grouped: Record<string, GoalProgressEvent[]> = {}
+
+    ;(data || []).forEach((event) => {
+      if (!grouped[event.goal_id]) {
+        grouped[event.goal_id] = []
+      }
+
+      grouped[event.goal_id].push(
+        event as GoalProgressEvent
+      )
+    })
+
+    setGoalHistory(grouped)
+  }
 
   async function handleCreateGoal() {
     await createGoal({
@@ -452,30 +489,21 @@ export default function GoalsPage() {
   }
 
   if (loading) {
-    return (
-      <div className="p-6">
-        Carregando metas...
-      </div>
-    )
+    return <div className="p-6">Carregando metas...</div>
   }
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">
-            Metas
-          </h1>
+          <h1 className="text-2xl font-bold">Metas</h1>
 
           <p className="text-sm text-muted-foreground">
             Transforme ações em progresso real.
           </p>
         </div>
 
-        <Dialog
-          open={isOpen}
-          onOpenChange={setIsOpen}
-        >
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
@@ -485,9 +513,7 @@ export default function GoalsPage() {
 
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>
-                Criar meta
-              </DialogTitle>
+              <DialogTitle>Criar meta</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-5">
@@ -499,9 +525,7 @@ export default function GoalsPage() {
                     <button
                       key={item}
                       type="button"
-                      onClick={() =>
-                        setEmoji(item)
-                      }
+                      onClick={() => setEmoji(item)}
                       className={cn(
                         "flex h-10 w-10 items-center justify-center rounded-xl border text-xl",
                         emoji === item
@@ -518,9 +542,7 @@ export default function GoalsPage() {
               <Input
                 placeholder="Nome da meta"
                 value={title}
-                onChange={(e) =>
-                  setTitle(e.target.value)
-                }
+                onChange={(e) => setTitle(e.target.value)}
               />
 
               <Input
@@ -535,9 +557,7 @@ export default function GoalsPage() {
               <Input
                 placeholder="Unidade"
                 value={unit}
-                onChange={(e) =>
-                  setUnit(e.target.value)
-                }
+                onChange={(e) => setUnit(e.target.value)}
               />
 
               <div>
@@ -627,8 +647,10 @@ export default function GoalsPage() {
 
       <div className="grid gap-5 md:grid-cols-2">
         {goals.map((goal) => {
-          const analytics =
-            calcularAnalytics(goal)
+          const analytics = calcularAnalytics(
+            goal,
+            goalHistory[goal.id] || []
+          )
 
           return (
             <Card
@@ -647,16 +669,12 @@ export default function GoalsPage() {
                         {goal.emoji || "🎯"}
                       </span>
 
-                      <span>
-                        {goal.title}
-                      </span>
+                      <span>{goal.title}</span>
                     </CardTitle>
 
                     <div className="flex flex-wrap gap-2">
                       <Badge>
-                        {prioridadeLabel(
-                          goal.priority
-                        )}
+                        {prioridadeLabel(goal.priority)}
                       </Badge>
 
                       <Badge variant="secondary">
@@ -718,9 +736,7 @@ export default function GoalsPage() {
 
                     <p className="text-lg font-bold text-primary">
                       {Math.min(
-                        Math.round(
-                          analytics.progress
-                        ),
+                        Math.round(analytics.progress),
                         100
                       )}
                       %
@@ -729,9 +745,7 @@ export default function GoalsPage() {
 
                   <Progress
                     value={Math.min(
-                      Math.round(
-                        analytics.progress
-                      ),
+                      Math.round(analytics.progress),
                       100
                     )}
                   />
@@ -748,8 +762,7 @@ export default function GoalsPage() {
                     </div>
 
                     <p className="text-lg font-bold">
-                      {analytics.daysRemaining !==
-                      null
+                      {analytics.daysRemaining !== null
                         ? analytics.daysRemaining
                         : "--"}
                     </p>
@@ -765,8 +778,7 @@ export default function GoalsPage() {
                     </div>
 
                     <p className="text-sm font-bold">
-                      {analytics.requiredPerDay !==
-                      null
+                      {analytics.requiredPerDay !== null
                         ? `${analytics.requiredPerDay.toFixed(
                             1
                           )} ${goal.unit}/dia`
@@ -784,8 +796,7 @@ export default function GoalsPage() {
                     </div>
 
                     <p className="text-sm font-bold">
-                      {analytics.projectedDays !==
-                      null
+                      {analytics.projectedDays !== null
                         ? `${analytics.projectedDays} dias`
                         : "Sem dados suficientes"}
                     </p>
@@ -807,10 +818,7 @@ export default function GoalsPage() {
                   <Button
                     variant="outline"
                     onClick={() =>
-                      updateManualProgress(
-                        goal.id,
-                        1
-                      )
+                      updateManualProgress(goal.id, 1)
                     }
                   >
                     +1
@@ -819,10 +827,7 @@ export default function GoalsPage() {
                   <Button
                     variant="outline"
                     onClick={() =>
-                      updateManualProgress(
-                        goal.id,
-                        5
-                      )
+                      updateManualProgress(goal.id, 5)
                     }
                   >
                     +5
@@ -831,10 +836,7 @@ export default function GoalsPage() {
                   <Button
                     variant="outline"
                     onClick={() =>
-                      updateManualProgress(
-                        goal.id,
-                        10
-                      )
+                      updateManualProgress(goal.id, 10)
                     }
                   >
                     +10
