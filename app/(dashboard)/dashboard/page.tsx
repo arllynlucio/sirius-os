@@ -11,6 +11,7 @@ import { TaskList } from "@/components/dashboard/task-list"
 import { ProductivityRating } from "@/components/dashboard/productivity-rating"
 import { StreakCard } from "@/components/dashboard/streak-card"
 import { QuickStats } from "@/components/dashboard/quick-stats"
+import { InsightsCard } from "@/components/dashboard/insights-card"
 
 export type DashboardTask = {
   id: string
@@ -20,17 +21,42 @@ export type DashboardTask = {
   completed: boolean
 }
 
+type DashboardGoal = {
+  id: string
+  title: string
+  is_primary: boolean
+  deadline?: string | null
+  current_value: number
+  target_value: number
+  created_at: string
+}
+
 export default function DashboardPage() {
   const router = useRouter()
 
-  const { currentStreak, setCurrentStreak, triggerRefresh } = useDashboard()
+  const {
+    currentStreak,
+    setCurrentStreak,
+    triggerRefresh,
+  } = useDashboard()
 
   const [loading, setLoading] = useState(true)
-  const [currentDate, setCurrentDate] = useState(getLocalDate())
+  const [currentDate, setCurrentDate] =
+    useState(getLocalDate())
 
-  const [tasks, setTasks] = useState<DashboardTask[]>([])
-  const [activeGoals, setActiveGoals] = useState(0)
-  const [productiveDays, setProductiveDays] = useState(0)
+  const [tasks, setTasks] = useState<
+    DashboardTask[]
+  >([])
+
+  const [goals, setGoals] = useState<
+    DashboardGoal[]
+  >([])
+
+  const [activeGoals, setActiveGoals] =
+    useState(0)
+
+  const [productiveDays, setProductiveDays] =
+    useState(0)
 
   useEffect(() => {
     checkAuth()
@@ -79,8 +105,11 @@ export default function DashboardPage() {
       .eq("date", today)
 
     const totalTasks = tasksData?.length || 0
+
     const completedTasks =
-      tasksData?.filter((task) => task.completed).length || 0
+      tasksData?.filter(
+        (task) => task.completed
+      ).length || 0
 
     const { data: checkin } = await supabase
       .from("checkins")
@@ -89,18 +118,19 @@ export default function DashboardPage() {
       .eq("checkin_date", today)
       .maybeSingle()
 
-      const { data: allCheckins } = await supabase
-  .from("checkins")
-  .select("productivity")
-  .eq("user_id", user.id)
+    const { data: allCheckins } = await supabase
+      .from("checkins")
+      .select("productivity")
+      .eq("user_id", user.id)
 
-setProductiveDays(
-  allCheckins?.filter(
-    (item) =>
-      item.productivity &&
-      item.productivity.trim() !== ""
-  ).length || 0
-)
+    setProductiveDays(
+      allCheckins?.filter(
+        (item) =>
+          item.productivity &&
+          item.productivity.trim() !== ""
+      ).length || 0
+    )
+
     const validDay =
       totalTasks > 0 &&
       completedTasks === totalTasks &&
@@ -135,7 +165,9 @@ setProductiveDays(
       return
     }
 
-    if (streak.month_reference !== currentMonth) {
+    if (
+      streak.month_reference !== currentMonth
+    ) {
       if (!validDay) {
         await supabase
           .from("streaks")
@@ -157,7 +189,8 @@ setProductiveDays(
         .from("streaks")
         .update({
           current_streak: 1,
-          longest_streak: streak.longest_streak || 1,
+          longest_streak:
+            streak.longest_streak || 1,
           perfect_days: 1,
           failed_days: 0,
           month_reference: currentMonth,
@@ -171,14 +204,22 @@ setProductiveDays(
     }
 
     if (!validDay) {
-      if (streak.last_qualified_date === today) {
-        const fallback = Math.max((streak.current_streak || 1) - 1, 0)
+      if (
+        streak.last_qualified_date === today
+      ) {
+        const fallback = Math.max(
+          (streak.current_streak || 1) - 1,
+          0
+        )
 
         await supabase
           .from("streaks")
           .update({
             current_streak: fallback,
-            perfect_days: Math.max((streak.perfect_days || 1) - 1, 0),
+            perfect_days: Math.max(
+              (streak.perfect_days || 1) - 1,
+              0
+            ),
             last_qualified_date: null,
           })
           .eq("user_id", user.id)
@@ -188,26 +229,38 @@ setProductiveDays(
         return
       }
 
-      setCurrentStreak(streak.current_streak || 0)
+      setCurrentStreak(
+        streak.current_streak || 0
+      )
       triggerRefresh()
       return
     }
 
-    if (streak.last_qualified_date === today) {
-      setCurrentStreak(streak.current_streak || 0)
+    if (
+      streak.last_qualified_date === today
+    ) {
+      setCurrentStreak(
+        streak.current_streak || 0
+      )
       triggerRefresh()
       return
     }
 
-    const nextStreak = (streak.current_streak || 0) + 1
-    const nextLongest = Math.max(streak.longest_streak || 0, nextStreak)
+    const nextStreak =
+      (streak.current_streak || 0) + 1
+
+    const nextLongest = Math.max(
+      streak.longest_streak || 0,
+      nextStreak
+    )
 
     await supabase
       .from("streaks")
       .update({
         current_streak: nextStreak,
         longest_streak: nextLongest,
-        perfect_days: (streak.perfect_days || 0) + 1,
+        perfect_days:
+          (streak.perfect_days || 0) + 1,
         last_qualified_date: today,
       })
       .eq("user_id", user.id)
@@ -216,7 +269,9 @@ setProductiveDays(
     triggerRefresh()
   }
 
-  const handleDayChange = async (newDate: string) => {
+  const handleDayChange = async (
+    newDate: string
+  ) => {
     setCurrentDate(newDate)
 
     const {
@@ -225,7 +280,11 @@ setProductiveDays(
 
     if (!user) return
 
-    await regenerateRoutineTasks(user.id, newDate)
+    await regenerateRoutineTasks(
+      user.id,
+      newDate
+    )
+
     await loadDashboardData()
   }
 
@@ -251,16 +310,19 @@ setProductiveDays(
       ).values()
     )
 
-    const routinesToInsert = uniqueTasks.map((task) => ({
-      user_id: userId,
-      title: task.title,
-      emoji: task.emoji,
-      type: "routine",
-      completed: false,
-      date: newDate,
-    }))
+    const routinesToInsert =
+      uniqueTasks.map((task) => ({
+        user_id: userId,
+        title: task.title,
+        emoji: task.emoji,
+        type: "routine",
+        completed: false,
+        date: newDate,
+      }))
 
-    await supabase.from("tasks").insert(routinesToInsert)
+    await supabase
+      .from("tasks")
+      .insert(routinesToInsert)
   }
 
   const loadDashboardData = async () => {
@@ -278,9 +340,11 @@ setProductiveDays(
       .select("*")
       .eq("user_id", user.id)
       .eq("date", today)
-      .order("created_at", { ascending: false })
+      .order("created_at", {
+        ascending: false,
+      })
 
-    const { data: goals } = await supabase
+    const { data: goalsData } = await supabase
       .from("goals")
       .select("*")
       .eq("user_id", user.id)
@@ -296,18 +360,32 @@ setProductiveDays(
       .eq("user_id", user.id)
       .maybeSingle()
 
-    setTasks((tasksData as DashboardTask[]) || [])
-    setActiveGoals(goals?.length || 0)
-  setProductiveDays(
-  checkins?.filter(
-    (checkin) => checkin.productivity !== null
-  ).length || 0
-)
+    setTasks(
+      (tasksData as DashboardTask[]) || []
+    )
 
-    if (!streak || streak.month_reference !== currentMonth) {
+    setGoals(
+      (goalsData as DashboardGoal[]) || []
+    )
+
+    setActiveGoals(goalsData?.length || 0)
+
+    setProductiveDays(
+      checkins?.filter(
+        (checkin) =>
+          checkin.productivity !== null
+      ).length || 0
+    )
+
+    if (
+      !streak ||
+      streak.month_reference !== currentMonth
+    ) {
       setCurrentStreak(0)
     } else {
-      setCurrentStreak(streak.current_streak || 0)
+      setCurrentStreak(
+        streak.current_streak || 0
+      )
     }
 
     triggerRefresh()
@@ -316,20 +394,38 @@ setProductiveDays(
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-muted-foreground">Carregando SIRIUS...</p>
+        <p className="text-muted-foreground">
+          Carregando SIRIUS...
+        </p>
       </div>
     )
   }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <StreakCard currentStreak={currentStreak} />
+      <StreakCard
+        currentStreak={currentStreak}
+      />
 
       <QuickStats
-        completedTasks={tasks.filter((t) => t.completed).length}
+        completedTasks={
+          tasks.filter((t) => t.completed)
+            .length
+        }
         totalTasks={tasks.length}
         activeGoals={activeGoals}
         productiveDays={productiveDays}
+      />
+
+      <InsightsCard
+        completedTasks={
+          tasks.filter((t) => t.completed)
+            .length
+        }
+        totalTasks={tasks.length}
+        currentStreak={currentStreak}
+        activeGoals={activeGoals}
+        goals={goals}
       />
 
       <EnergySelector />
@@ -341,7 +437,9 @@ setProductiveDays(
       />
 
       <ProductivityRating
-        onProductivityChanged={evaluateStreak}
+        onProductivityChanged={
+          evaluateStreak
+        }
       />
     </div>
   )
