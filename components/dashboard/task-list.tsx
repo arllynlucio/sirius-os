@@ -66,6 +66,17 @@ type TaskListProps = {
   onTasksChanged: () => Promise<void>
 }
 
+function enviarNotificacao(titulo: string, mensagem: string) {
+  if (typeof window === "undefined") return
+  if (!("Notification" in window)) return
+  if (Notification.permission !== "granted") return
+
+  new Notification(titulo, {
+    body: mensagem,
+    icon: "/icon-192.png",
+  })
+}
+
 export function TaskList({
   tasks,
   setTasks,
@@ -91,6 +102,7 @@ export function TaskList({
   const [scheduledTime, setScheduledTime] = useState("")
   const [reminderEnabled, setReminderEnabled] =
     useState(false)
+
   const [reminderMinutes, setReminderMinutes] =
     useState("15")
 
@@ -141,7 +153,6 @@ export function TaskList({
     setTaskEmoji(data.emoji)
     setTaskTitle(data.title)
     setTaskType(data.type)
-
     setScheduledTime(data.scheduled_time || "")
     setReminderEnabled(data.reminder_enabled || false)
 
@@ -164,7 +175,6 @@ export function TaskList({
 
   const handleSaveTask = async () => {
     if (!taskTitle.trim()) return
-
     if (linkGoalEnabled && !selectedGoalId) return
 
     const {
@@ -259,6 +269,15 @@ export function TaskList({
   ) => {
     const nextStatus = !currentStatus
 
+    const currentTask = tasks.find(
+      (task) => task.id === taskId
+    )
+
+    const link = getTaskLinks(taskId)[0]
+    const linkedGoal = goals.find(
+      (g) => g.id === link?.goal_id
+    )
+
     setTasks((prev) =>
       prev.map((task) =>
         task.id === taskId
@@ -281,6 +300,36 @@ export function TaskList({
       taskId,
       nextStatus
     )
+
+    if (nextStatus && currentTask) {
+      enviarNotificacao(
+        "SIRIUS",
+        `✅ Tarefa "${currentTask.title}" concluída.`
+      )
+
+      if (link && linkedGoal) {
+        enviarNotificacao(
+          "SIRIUS",
+          `📈 +${link.progress_delta} ${linkedGoal.unit} adicionados à meta "${linkedGoal.title}".`
+        )
+
+        const updatedGoal = goals.find(
+          (g) => g.id === linkedGoal.id
+        )
+
+        if (
+          updatedGoal &&
+          updatedGoal.current_value +
+            link.progress_delta >=
+            updatedGoal.target_value
+        ) {
+          enviarNotificacao(
+            "SIRIUS",
+            `🎯 Meta "${linkedGoal.title}" concluída!`
+          )
+        }
+      }
+    }
 
     await onTasksChanged()
   }
@@ -464,9 +513,7 @@ export function TaskList({
               </div>
 
               <div className="flex items-center justify-between rounded-xl border p-4">
-                <Label>
-                  Vincular a uma meta
-                </Label>
+                <Label>Vincular a uma meta</Label>
 
                 <Switch
                   checked={linkGoalEnabled}

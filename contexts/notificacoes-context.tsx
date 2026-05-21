@@ -33,11 +33,26 @@ export function NotificacoesProvider({
     await solicitarPermissaoNotificacoes()
   }
 
+  async function resetarLembretesDiarios() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    await supabase
+      .from("tasks")
+      .update({
+        last_reminder_sent: null,
+        late_reminder_sent: null,
+      })
+      .eq("user_id", user.id)
+      .neq("date", getLocalDate())
+  }
+
   async function verificarTarefas() {
     if (typeof window === "undefined") return
-
     if (!("Notification" in window)) return
-
     if (Notification.permission !== "granted") return
 
     const {
@@ -45,6 +60,8 @@ export function NotificacoesProvider({
     } = await supabase.auth.getUser()
 
     if (!user) return
+
+    await resetarLembretesDiarios()
 
     const { data: tasks } = await supabase
       .from("tasks")
@@ -74,30 +91,31 @@ export function NotificacoesProvider({
           task.reminder_minutes_before * 60000
       )
 
-      const preReminderDiff = Math.abs(
+      const diff = Math.abs(
         now.getTime() - reminderTime.getTime()
       )
 
-      if (preReminderDiff <= 60000) {
-        if (!task.last_reminder_sent) {
-          enviarNotificacao(
-            "SIRIUS",
-            `Sua tarefa "${task.title}" começa em ${task.reminder_minutes_before} minutos.`
-          )
+      if (diff <= 60000 && !task.last_reminder_sent) {
+        enviarNotificacao(
+          "SIRIUS",
+          `Sua tarefa "${task.title}" começa em ${task.reminder_minutes_before} minutos.`
+        )
 
-          await supabase
-            .from("tasks")
-            .update({
-              last_reminder_sent:
-                new Date().toISOString(),
-            })
-            .eq("id", task.id)
+        await supabase
+          .from("tasks")
+          .update({
+            last_reminder_sent:
+              new Date().toISOString(),
+          })
+          .eq("id", task.id)
 
-          continue
-        }
+        continue
       }
 
-      if (now > taskTime && !task.late_reminder_sent) {
+      if (
+        now > taskTime &&
+        !task.late_reminder_sent
+      ) {
         enviarNotificacao(
           "SIRIUS",
           `⏰ Sua tarefa "${task.title}" está atrasada.`
@@ -116,7 +134,6 @@ export function NotificacoesProvider({
 
   useEffect(() => {
     solicitarPermissao()
-
     verificarTarefas()
 
     const interval = setInterval(() => {

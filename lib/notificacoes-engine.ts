@@ -2,7 +2,6 @@ export async function solicitarPermissaoNotificacoes() {
   if (typeof window === "undefined") return false
 
   if (!("Notification" in window)) {
-    console.warn("Navegador não suporta notificações")
     return false
   }
 
