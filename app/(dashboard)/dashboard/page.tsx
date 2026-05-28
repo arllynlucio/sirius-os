@@ -2,16 +2,20 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+
 import { supabase } from "@/lib/supabase"
-import { getLocalDate, getMonthReference } from "@/lib/date"
+import {
+  getLocalDate,
+  getMonthReference,
+} from "@/lib/date"
+
 import { useDashboard } from "@/components/dashboard/dashboard-context"
 
 import { EnergySelector } from "@/components/dashboard/energy-selector"
 import { TaskList } from "@/components/dashboard/task-list"
 import { ProductivityRating } from "@/components/dashboard/productivity-rating"
-import { StreakCard } from "@/components/dashboard/streak-card"
 import { QuickStats } from "@/components/dashboard/quick-stats"
-import { InsightsCard } from "@/components/dashboard/insights-card"
+import { InsightsPanel } from "@/components/dashboard/insights-panel"
 
 export type DashboardTask = {
   id: string
@@ -41,6 +45,10 @@ export default function DashboardPage() {
   } = useDashboard()
 
   const [loading, setLoading] = useState(true)
+
+  const [showInsights, setShowInsights] =
+    useState(false)
+
   const [currentDate, setCurrentDate] =
     useState(getLocalDate())
 
@@ -232,6 +240,7 @@ export default function DashboardPage() {
       setCurrentStreak(
         streak.current_streak || 0
       )
+
       triggerRefresh()
       return
     }
@@ -242,6 +251,7 @@ export default function DashboardPage() {
       setCurrentStreak(
         streak.current_streak || 0
       )
+
       triggerRefresh()
       return
     }
@@ -402,11 +412,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <StreakCard
-        currentStreak={currentStreak}
-      />
-
+    <div className="mx-auto max-w-6xl space-y-6">
       <QuickStats
         completedTasks={
           tasks.filter((t) => t.completed)
@@ -415,18 +421,27 @@ export default function DashboardPage() {
         totalTasks={tasks.length}
         activeGoals={activeGoals}
         productiveDays={productiveDays}
+        currentStreak={currentStreak}
+        onToggleInsights={() =>
+          setShowInsights((prev) => !prev)
+        }
       />
 
-      <InsightsCard
-        completedTasks={
-          tasks.filter((t) => t.completed)
-            .length
-        }
-        totalTasks={tasks.length}
-        currentStreak={currentStreak}
-        activeGoals={activeGoals}
-        goals={goals}
-      />
+      {showInsights && (
+        <InsightsPanel
+          onClose={() =>
+            setShowInsights(false)
+          }
+          completedTasks={
+            tasks.filter((t) => t.completed)
+              .length
+          }
+          totalTasks={tasks.length}
+          activeGoals={activeGoals}
+          productiveDays={productiveDays}
+          currentStreak={currentStreak}
+        />
+      )}
 
       <EnergySelector />
 
