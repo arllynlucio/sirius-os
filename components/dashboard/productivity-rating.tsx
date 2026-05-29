@@ -71,21 +71,46 @@ export function ProductivityRating({
     if (!user) return
 
     const today = getLocalDate()
-    const nextValue =
-      selectedProductivity === value ? null : value
 
-    const { data: existingCheckin } = await supabase
-      .from("checkins")
-      .select("*")
+    const nextValue =
+      selectedProductivity === value
+        ? null
+        : value
+
+    const { data: tasksData } = await supabase
+      .from("tasks")
+      .select("id")
       .eq("user_id", user.id)
-      .eq("checkin_date", today)
-      .maybeSingle()
+      .eq("date", today)
+      .eq("completed", true)
+
+    const completedTasks =
+      tasksData?.length || 0
+
+    const { data: goalsData } = await supabase
+      .from("goals")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("status", "completed")
+
+    const completedGoals =
+      goalsData?.length || 0
+
+    const { data: existingCheckin } =
+      await supabase
+        .from("checkins")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("checkin_date", today)
+        .maybeSingle()
 
     if (existingCheckin) {
       await supabase
         .from("checkins")
         .update({
           productivity: nextValue,
+          completed_tasks: completedTasks,
+          completed_goals: completedGoals,
         })
         .eq("id", existingCheckin.id)
     } else if (nextValue) {
@@ -95,6 +120,8 @@ export function ProductivityRating({
           user_id: user.id,
           checkin_date: today,
           productivity: nextValue,
+          completed_tasks: completedTasks,
+          completed_goals: completedGoals,
         })
     }
 
@@ -103,7 +130,9 @@ export function ProductivityRating({
     await onProductivityChanged()
 
     if (nextValue === "great") {
-      toast.success("Parabéns pelo dia incrível!")
+      toast.success(
+        "Parabéns pelo dia incrível!"
+      )
     }
   }
 
@@ -121,15 +150,20 @@ export function ProductivityRating({
           {productivityOptions.map((option) => (
             <button
               key={option.value}
-              onClick={() => handleSelect(option.value)}
+              onClick={() =>
+                handleSelect(option.value)
+              }
               className={cn(
                 "group flex flex-col items-center gap-2 rounded-2xl p-4 transition-all duration-200",
-                selectedProductivity === option.value
+                selectedProductivity ===
+                  option.value
                   ? `${option.color} shadow-lg`
                   : "bg-background hover:bg-background/80"
               )}
             >
-              <span className="text-3xl">{option.emoji}</span>
+              <span className="text-3xl">
+                {option.emoji}
+              </span>
 
               <span className="text-sm font-medium">
                 {option.label}
@@ -138,7 +172,8 @@ export function ProductivityRating({
               <span
                 className={cn(
                   "hidden text-xs sm:block",
-                  selectedProductivity === option.value
+                  selectedProductivity ===
+                    option.value
                     ? "opacity-80"
                     : "text-muted-foreground"
                 )}
