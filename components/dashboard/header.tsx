@@ -1,6 +1,11 @@
 "use client"
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "@/components/ui/avatar"
+
 import { Flame, LogOut } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
@@ -12,14 +17,18 @@ export function DashboardHeader() {
   const { currentStreak } = useDashboard()
 
   const [userName, setUserName] = useState("Usuário")
+  const [avatarUrl, setAvatarUrl] = useState("")
 
   const today = new Date()
 
-  const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  })
+  const dateFormatter = new Intl.DateTimeFormat(
+    "pt-BR",
+    {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }
+  )
 
   const formattedDate = dateFormatter.format(today)
 
@@ -40,6 +49,16 @@ export function DashboardHeader() {
       "Usuário"
 
     setUserName(displayName)
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (profile?.avatar_url) {
+      setAvatarUrl(profile.avatar_url)
+    }
   }
 
   const handleLogout = async () => {
@@ -52,20 +71,35 @@ export function DashboardHeader() {
 
     if (hour < 12) return "Bom dia"
     if (hour < 18) return "Boa tarde"
+
     return "Boa noite"
   }
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur-xl">
       <div className="flex h-16 items-center justify-between px-4 lg:px-6">
-        <div className="min-w-0 pl-12 lg:pl-0">
-          <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">
-            {getGreeting()}, {userName.split(" ")[0]}!
-          </h1>
+        <div className="flex min-w-0 items-center gap-3 pl-12 lg:pl-0">
+          <Avatar className="h-10 w-10 border-2 border-border">
+            <AvatarImage
+              src={avatarUrl}
+              alt={userName}
+            />
 
-          <p className="truncate text-xs capitalize text-muted-foreground sm:text-sm">
-            {formattedDate}
-          </p>
+            <AvatarFallback className="bg-primary/10 text-primary">
+              {userName[0]?.toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">
+              {getGreeting()},{" "}
+              {userName.split(" ")[0]}!
+            </h1>
+
+            <p className="truncate text-xs capitalize text-muted-foreground sm:text-sm">
+              {formattedDate}
+            </p>
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-4">
@@ -86,14 +120,11 @@ export function DashboardHeader() {
             className="flex items-center gap-2 rounded-lg border border-border px-2 py-2 text-sm hover:bg-muted sm:px-3"
           >
             <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Sair</span>
-          </button>
 
-          <Avatar className="h-8 w-8 border-2 border-border sm:h-9 sm:w-9">
-            <AvatarFallback className="bg-primary/10 text-primary">
-              {userName[0]?.toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+            <span className="hidden sm:inline">
+              Sair
+            </span>
+          </button>
         </div>
       </div>
     </header>
