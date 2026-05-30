@@ -227,9 +227,13 @@ export default function SettingsPage() {
 
       router.push("/dashboard")
       router.refresh()
-    } catch (error) {
-      console.error(error)
-      toast.error("Falha ao redefinir dados")
+    catch (error) {
+  console.error("UPLOAD ERROR:", error)
+
+  toast.error(
+    JSON.stringify(error, null, 2)
+  )
+}
     } finally {
       setResetting(false)
     }
