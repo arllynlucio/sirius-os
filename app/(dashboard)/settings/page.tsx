@@ -54,7 +54,7 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-  const handleAvatarUpload = async (
+ const handleAvatarUpload = async (
   event: React.ChangeEvent<HTMLInputElement>
 ) => {
   const file = event.target.files?.[0]
@@ -63,33 +63,32 @@ export default function SettingsPage() {
 
   try {
     const fileExt = file.name.split(".").pop()
+
     const fileName =
-  `${profile.id}-${Date.now()}.${fileExt}`
+      `${profile.id}-${Date.now()}.${fileExt}`
 
     const { error: uploadError } =
       await supabase.storage
         .from("avatars")
-        .upload(fileName, file, {
-          upsert: true,
-        })
+        .upload(fileName, file)
 
     if (uploadError) throw uploadError
 
-   const {
-  data: { publicUrl },
-} = supabase.storage
-  .from("avatars")
-  .getPublicUrl(fileName)
+    const {
+      data: { publicUrl },
+    } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(fileName)
 
-const avatarUrl =
-  `${publicUrl}?t=${Date.now()}`
+    const avatarUrl =
+      `${publicUrl}?t=${Date.now()}`
 
     const { error: updateError } =
       await supabase
-  .from("profiles")
-  .update({
-    avatar_url: avatarUrl,
-  })
+        .from("profiles")
+        .update({
+          avatar_url: avatarUrl,
+        })
         .eq("id", profile.id)
 
     if (updateError) throw updateError
@@ -98,7 +97,8 @@ const avatarUrl =
 
     await loadProfile()
   } catch (error) {
-    console.error(error)
+    console.error("UPLOAD ERROR:", error)
+
     toast.error("Erro ao enviar foto")
   }
 }
