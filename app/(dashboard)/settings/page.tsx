@@ -15,7 +15,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 
 import {
@@ -33,6 +37,7 @@ type Profile = {
   id: string
   name: string
   email: string
+  avatar_url?: string | null
 }
 
 export default function SettingsPage() {
@@ -47,6 +52,52 @@ export default function SettingsPage() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [newPassword, setNewPassword] = useState("")
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+
+  const handleAvatarUpload = async (
+  event: React.ChangeEvent<HTMLInputElement>
+) => {
+  const file = event.target.files?.[0]
+
+  if (!file || !profile) return
+
+  try {
+    const fileExt = file.name.split(".").pop()
+    const fileName = `${profile.id}.${fileExt}`
+
+    const { error: uploadError } =
+      await supabase.storage
+        .from("avatars")
+        .upload(fileName, file, {
+          upsert: true,
+        })
+
+    if (uploadError) throw uploadError
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(fileName)
+
+    const { error: updateError } =
+      await supabase
+        .from("profiles")
+        .update({
+          avatar_url: publicUrl,
+        })
+        .eq("id", profile.id)
+
+    if (updateError) throw updateError
+
+    toast.success("Foto atualizada")
+
+    await loadProfile()
+  } catch (error) {
+    console.error(error)
+    toast.error("Erro ao enviar foto")
+  }
+}
 
   useEffect(() => {
     loadProfile()
@@ -225,11 +276,25 @@ export default function SettingsPage() {
 
         <CardContent className="space-y-6">
           <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16 border-2 border-border">
-              <AvatarFallback className="bg-primary/10 text-xl text-primary">
-                {name?.[0]?.toUpperCase() || "U"}
-              </AvatarFallback>
-            </Avatar>
+            <div className="flex flex-col items-center gap-3">
+  <Avatar className="h-20 w-20 border-2 border-border">
+    <AvatarImage
+      src={profile?.avatar_url || ""}
+      alt={name}
+    />
+
+    <AvatarFallback className="bg-primary/10 text-xl text-primary">
+      {name?.[0]?.toUpperCase() || "U"}
+    </AvatarFallback>
+  </Avatar>
+
+  <Input
+    type="file"
+    accept="image/*"
+    onChange={handleAvatarUpload}
+    className="max-w-xs"
+  />
+</div>
 
             <div>
               <p className="font-medium text-foreground">{name}</p>
