@@ -74,18 +74,21 @@ export default function SettingsPage() {
 
     if (uploadError) throw uploadError
 
-    const {
-      data: { publicUrl },
-    } = supabase.storage
-      .from("avatars")
-      .getPublicUrl(fileName)
+   const {
+  data: { publicUrl },
+} = supabase.storage
+  .from("avatars")
+  .getPublicUrl(fileName)
+
+const avatarUrl =
+  `${publicUrl}?t=${Date.now()}`
 
     const { error: updateError } =
       await supabase
-        .from("profiles")
-        .update({
-          avatar_url: publicUrl,
-        })
+  .from("profiles")
+  .update({
+    avatar_url: avatarUrl,
+  })
         .eq("id", profile.id)
 
     if (updateError) throw updateError
