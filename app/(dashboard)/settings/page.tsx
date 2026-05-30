@@ -1,5 +1,6 @@
 "use client"
 
+import { Camera } from "lucide-react"
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
@@ -309,12 +310,19 @@ export default function SettingsPage() {
     </AvatarFallback>
   </Avatar>
 
-  <Input
+  <label className="cursor-pointer">
+  <input
     type="file"
     accept="image/*"
     onChange={handleAvatarUpload}
-    className="max-w-xs"
+    className="hidden"
   />
+
+  <div className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm transition hover:bg-muted">
+    <Camera className="h-4 w-4" />
+    Alterar foto
+  </div>
+</label>
 </div>
 
             <div>
