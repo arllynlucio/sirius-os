@@ -52,7 +52,7 @@ export default function SettingsPage() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [newPassword, setNewPassword] = useState("")
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  
 
  const handleAvatarUpload = async (
   event: React.ChangeEvent<HTMLInputElement>
@@ -201,47 +201,60 @@ export default function SettingsPage() {
   }
 
   const handleResetAll = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) return
+  if (!user) return
 
-    const confirmed = window.confirm(
-      "Tem certeza? Isso apagará TODO o histórico operacional do SIRIUS."
-    )
-
-    if (!confirmed) return
-
-    const secondConfirmation = window.confirm(
-      "Confirmação final: essa ação é irreversível."
-    )
-
-    if (!secondConfirmation) return
-
-    setResetting(true)
-
-    try {
-      await supabase.from("tasks").delete().eq("user_id", user.id)
-      await supabase.from("goals").delete().eq("user_id", user.id)
-      await supabase.from("checkins").delete().eq("user_id", user.id)
-      await supabase.from("streaks").delete().eq("user_id", user.id)
-
-      toast.success("SIRIUS redefinido com sucesso")
-
-      router.push("/dashboard")
-      router.refresh()
-    catch (error) {
-  console.error("UPLOAD ERROR:", error)
-
-  toast.error(
-    JSON.stringify(error, null, 2)
+  const confirmed = window.confirm(
+    "Tem certeza? Isso apagará TODO o histórico operacional do SIRIUS."
   )
-}
-    } finally {
-      setResetting(false)
-    }
+
+  if (!confirmed) return
+
+  const secondConfirmation = window.confirm(
+    "Confirmação final: essa ação é irreversível."
+  )
+
+  if (!secondConfirmation) return
+
+  setResetting(true)
+
+  try {
+    await supabase
+      .from("tasks")
+      .delete()
+      .eq("user_id", user.id)
+
+    await supabase
+      .from("goals")
+      .delete()
+      .eq("user_id", user.id)
+
+    await supabase
+      .from("checkins")
+      .delete()
+      .eq("user_id", user.id)
+
+    await supabase
+      .from("streaks")
+      .delete()
+      .eq("user_id", user.id)
+
+    toast.success(
+      "SIRIUS redefinido com sucesso"
+    )
+
+    router.push("/dashboard")
+    router.refresh()
+  } catch (error) {
+    console.error(error)
+    toast.error("Falha ao redefinir dados")
+  } finally {
+    setResetting(false)
   }
+}
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
