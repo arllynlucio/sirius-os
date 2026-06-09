@@ -914,3 +914,6 @@ export function TaskList({
     </div>
   )}
 </CardContent>
+    </Card>
+  )
+}
