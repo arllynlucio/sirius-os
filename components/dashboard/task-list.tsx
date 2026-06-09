@@ -609,124 +609,308 @@ export function TaskList({
         </Dialog>
       </CardHeader>
 
-      <CardContent className="space-y-2">
-        {tasks.map((task: any) => {
-          const link =
-            getTaskLinks(task.id)[0]
+      <CardContent className="space-y-5">
+  {tasks.some(
+    (task: any) =>
+      task.category === "professional"
+  ) && (
+    <div>
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-lg">💼</span>
 
-          const linkedGoal = goals.find(
-            (g) => g.id === link?.goal_id
+        <h3 className="font-semibold text-foreground">
+          Trabalho
+        </h3>
+
+        <Badge variant="secondary">
+          {
+            tasks.filter(
+              (task: any) =>
+                task.category ===
+                "professional"
+            ).length
+          }
+        </Badge>
+      </div>
+
+      <div className="space-y-2">
+        {tasks
+          .filter(
+            (task: any) =>
+              task.category ===
+              "professional"
           )
+          .map((task: any) => {
+            const link =
+              getTaskLinks(task.id)[0]
 
-          return (
-            <div
-              key={task.id}
-              className="rounded-xl bg-background/50 p-3"
-            >
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() =>
-                    toggleTask(
-                      task.id,
-                      task.completed
-                    )
-                  }
-                >
-                  {task.completed ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
-                  ) : (
-                    <Circle className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </button>
+            const linkedGoal =
+              goals.find(
+                (g) =>
+                  g.id === link?.goal_id
+              )
 
-                <span className="text-xl">
-                  {task.emoji}
-                </span>
-
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={cn(
-                      task.completed &&
-                        "line-through opacity-60"
-                    )}
+            return (
+              <div
+                key={task.id}
+                className="rounded-xl bg-background/50 p-3"
+              >
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() =>
+                      toggleTask(
+                        task.id,
+                        task.completed
+                      )
+                    }
                   >
-                    {task.title}
-                  </p>
-
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {task.type === "routine" && (
-                      <Badge variant="secondary">
-                        rotina
-                      </Badge>
+                    {task.completed ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <Circle className="h-5 w-5 text-muted-foreground" />
                     )}
+                  </button>
 
-                    <Badge variant="outline">
-  {task.category === "professional"
-    ? "💼 Profissional"
-    : "🏠 Pessoal"}
-</Badge>
+                  <span className="text-xl">
+                    {task.emoji}
+                  </span>
 
-                    {task.scheduled_time && (
-                      <Badge
-                        variant="outline"
-                        className="gap-1"
-                      >
-                        <Clock className="h-3 w-3" />
-                        {task.scheduled_time.slice(
-                          0,
-                          5
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        task.completed &&
+                          "line-through opacity-60"
+                      )}
+                    >
+                      {task.title}
+                    </p>
+
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {task.type ===
+                        "routine" && (
+                        <Badge variant="secondary">
+                          rotina
+                        </Badge>
+                      )}
+
+                      {task.scheduled_time && (
+                        <Badge
+                          variant="outline"
+                          className="gap-1"
+                        >
+                          <Clock className="h-3 w-3" />
+                          {task.scheduled_time.slice(
+                            0,
+                            5
+                          )}
+                        </Badge>
+                      )}
+
+                      {task.reminder_enabled && (
+                        <Badge
+                          variant="outline"
+                          className="gap-1"
+                        >
+                          <Bell className="h-3 w-3" />
+                          {
+                            task.reminder_minutes_before
+                          }{" "}
+                          min
+                        </Badge>
+                      )}
+
+                      {link &&
+                        linkedGoal && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1"
+                          >
+                            <Link2 className="h-3 w-3" />
+                            {
+                              linkedGoal.title
+                            }{" "}
+                            (+
+                            {
+                              link.progress_delta
+                            }
+                            )
+                          </Badge>
                         )}
-                      </Badge>
-                    )}
-
-                    {task.reminder_enabled && (
-                      <Badge
-                        variant="outline"
-                        className="gap-1"
-                      >
-                        <Bell className="h-3 w-3" />
-                        {
-                          task.reminder_minutes_before
-                        }{" "}
-                        min
-                      </Badge>
-                    )}
-
-                    {link && linkedGoal && (
-                      <Badge
-                        variant="outline"
-                        className="gap-1"
-                      >
-                        <Link2 className="h-3 w-3" />
-                        {linkedGoal.title} (+
-                        {
-                          link.progress_delta
-                        })
-                      </Badge>
-                    )}
+                    </div>
                   </div>
+
+                  <button
+                    onClick={() =>
+                      openEdit(task)
+                    }
+                  >
+                    <Pencil className="h-4 w-4 text-primary" />
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      removeTask(task.id)
+                    }
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </button>
                 </div>
-
-                <button
-                  onClick={() =>
-                    openEdit(task)
-                  }
-                >
-                  <Pencil className="h-4 w-4 text-primary" />
-                </button>
-
-                <button
-                  onClick={() =>
-                    removeTask(task.id)
-                  }
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </button>
               </div>
-            </div>
+            )
+          })}
+      </div>
+    </div>
+  )}
+
+  {tasks.some(
+    (task: any) =>
+      task.category !== "professional"
+  ) && (
+    <div>
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-lg">🏠</span>
+
+        <h3 className="font-semibold text-foreground">
+          Pessoal
+        </h3>
+
+        <Badge variant="secondary">
+          {
+            tasks.filter(
+              (task: any) =>
+                task.category !==
+                "professional"
+            ).length
+          }
+        </Badge>
+      </div>
+
+      <div className="space-y-2">
+        {tasks
+          .filter(
+            (task: any) =>
+              task.category !==
+              "professional"
           )
-        })}
-      </CardContent>
-    </Card>
-  )
-}
+          .map((task: any) => {
+            const link =
+              getTaskLinks(task.id)[0]
+
+            const linkedGoal =
+              goals.find(
+                (g) =>
+                  g.id === link?.goal_id
+              )
+
+            return (
+              <div
+                key={task.id}
+                className="rounded-xl bg-background/50 p-3"
+              >
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() =>
+                      toggleTask(
+                        task.id,
+                        task.completed
+                      )
+                    }
+                  >
+                    {task.completed ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <Circle className="h-5 w-5 text-muted-foreground" />
+                    )}
+                  </button>
+
+                  <span className="text-xl">
+                    {task.emoji}
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        task.completed &&
+                          "line-through opacity-60"
+                      )}
+                    >
+                      {task.title}
+                    </p>
+
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {task.type ===
+                        "routine" && (
+                        <Badge variant="secondary">
+                          rotina
+                        </Badge>
+                      )}
+
+                      {task.scheduled_time && (
+                        <Badge
+                          variant="outline"
+                          className="gap-1"
+                        >
+                          <Clock className="h-3 w-3" />
+                          {task.scheduled_time.slice(
+                            0,
+                            5
+                          )}
+                        </Badge>
+                      )}
+
+                      {task.reminder_enabled && (
+                        <Badge
+                          variant="outline"
+                          className="gap-1"
+                        >
+                          <Bell className="h-3 w-3" />
+                          {
+                            task.reminder_minutes_before
+                          }{" "}
+                          min
+                        </Badge>
+                      )}
+
+                      {link &&
+                        linkedGoal && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1"
+                          >
+                            <Link2 className="h-3 w-3" />
+                            {
+                              linkedGoal.title
+                            }{" "}
+                            (+
+                            {
+                              link.progress_delta
+                            }
+                            )
+                          </Badge>
+                        )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      openEdit(task)
+                    }
+                  >
+                    <Pencil className="h-4 w-4 text-primary" />
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      removeTask(task.id)
+                    }
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+      </div>
+    </div>
+  )}
+</CardContent>
