@@ -99,6 +99,10 @@ export function TaskList({
   const [taskType, setTaskType] =
     useState<"single" | "routine">("single")
 
+    const [taskCategory, setTaskCategory] =
+  useState<"personal" | "professional">(
+    "personal"
+  )
   const [scheduledTime, setScheduledTime] = useState("")
   const [reminderEnabled, setReminderEnabled] =
     useState(false)
@@ -123,6 +127,7 @@ export function TaskList({
     setTaskEmoji("📚")
     setTaskTitle("")
     setTaskType("single")
+    setTaskCategory("personal")
     setScheduledTime("")
     setReminderEnabled(false)
     setReminderMinutes("15")
@@ -153,6 +158,9 @@ export function TaskList({
     setTaskEmoji(data.emoji)
     setTaskTitle(data.title)
     setTaskType(data.type)
+    setTaskCategory(
+  data.category || "personal"
+)
     setScheduledTime(data.scheduled_time || "")
     setReminderEnabled(data.reminder_enabled || false)
 
@@ -190,6 +198,7 @@ export function TaskList({
           title: taskTitle.trim(),
           emoji: taskEmoji,
           type: taskType,
+          category: taskCategory,
           scheduled_time: scheduledTime || null,
           reminder_enabled: reminderEnabled,
           reminder_minutes_before:
@@ -221,6 +230,7 @@ export function TaskList({
         .from("tasks")
         .insert({
           user_id: user.id,
+          category: taskCategory,
           title: taskTitle.trim(),
           emoji: taskEmoji,
           type: taskType,
@@ -419,6 +429,30 @@ export function TaskList({
                   setTaskTitle(e.target.value)
                 }
               />
+              <Select
+  value={taskCategory}
+  onValueChange={(value) =>
+    setTaskCategory(
+      value as
+        | "personal"
+        | "professional"
+    )
+  }
+>
+  <SelectTrigger>
+    <SelectValue />
+  </SelectTrigger>
+
+  <SelectContent>
+    <SelectItem value="personal">
+      🏠 Pessoal
+    </SelectItem>
+
+    <SelectItem value="professional">
+      💼 Profissional
+    </SelectItem>
+  </SelectContent>
+</Select>
 
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -625,6 +659,12 @@ export function TaskList({
                         rotina
                       </Badge>
                     )}
+
+                    <Badge variant="outline">
+  {task.category === "professional"
+    ? "💼 Profissional"
+    : "🏠 Pessoal"}
+</Badge>
 
                     {task.scheduled_time && (
                       <Badge
