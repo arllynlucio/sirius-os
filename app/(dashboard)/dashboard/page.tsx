@@ -15,7 +15,6 @@ import { EnergySelector } from "@/components/dashboard/energy-selector"
 import { TaskList } from "@/components/dashboard/task-list"
 import { ProductivityRating } from "@/components/dashboard/productivity-rating"
 import { QuickStats } from "@/components/dashboard/quick-stats"
-import { InsightsPanel } from "@/components/dashboard/insights-panel"
 
 export type DashboardTask = {
   id: string
@@ -23,6 +22,7 @@ export type DashboardTask = {
   emoji: string
   type: "single" | "routine"
   completed: boolean
+  category?: "personal" | "professional"
 }
 
 type DashboardGoal = {
@@ -46,8 +46,6 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true)
 
-  const [showInsights, setShowInsights] =
-    useState(false)
 
   const [currentDate, setCurrentDate] =
     useState(getLocalDate())
@@ -413,36 +411,18 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <QuickStats
-        completedTasks={
-          tasks.filter((t) => t.completed)
-            .length
-        }
-        totalTasks={tasks.length}
-        activeGoals={activeGoals}
-        productiveDays={productiveDays}
-        currentStreak={currentStreak}
-        onToggleInsights={() =>
-          setShowInsights((prev) => !prev)
-        }
-      />
+     <QuickStats
+  completedTasks={
+    tasks.filter((t) => t.completed)
+      .length
+  }
+  totalTasks={tasks.length}
+  activeGoals={activeGoals}
+  productiveDays={productiveDays}
+  currentStreak={currentStreak}
+/>
 
-      {showInsights && (
-        <InsightsPanel
-          onClose={() =>
-            setShowInsights(false)
-          }
-          completedTasks={
-            tasks.filter((t) => t.completed)
-              .length
-          }
-          totalTasks={tasks.length}
-          activeGoals={activeGoals}
-          productiveDays={productiveDays}
-          currentStreak={currentStreak}
-        />
-      )}
-
+  
       <EnergySelector />
 
       <TaskList
