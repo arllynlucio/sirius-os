@@ -319,28 +319,54 @@ export default function DashboardPage() {
     )
 
     const routinesToInsert =
-      uniqueTasks.map((task) => ({
-        user_id: userId,
-        title: task.title,
-        emoji: task.emoji,
-        type: "routine",
-        completed: false,
-        date: newDate,
-      }))
+  uniqueTasks.map((task) => ({
+    user_id: userId,
+    title: task.title,
+    emoji: task.emoji,
+    type: "routine",
+    category: task.category,
+    completed: false,
+    date: newDate,
+  }))
 
     await supabase
       .from("tasks")
       .insert(routinesToInsert)
   }
 
+  const ensureTodayRoutineTasks = async (
+  userId: string
+) => {
+  const today = getLocalDate()
+
+  const { data: todayRoutines } =
+    await supabase
+      .from("tasks")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("type", "routine")
+      .eq("date", today)
+
+  if ((todayRoutines?.length || 0) > 0) {
+    return
+  }
+
+  await regenerateRoutineTasks(
+    userId,
+    today
+  )
+}
+
   const loadDashboardData = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+   const {
+  data: { user },
+} = await supabase.auth.getUser()
 
-    if (!user) return
+if (!user) return
 
-    const today = getLocalDate()
+await ensureTodayRoutineTasks(user.id)
+
+const today = getLocalDate()
     const currentMonth = getMonthReference()
 
     const { data: tasksData } = await supabase
