@@ -23,8 +23,9 @@ export type DashboardTask = {
   type: "single" | "routine"
   completed: boolean
   category?: "personal" | "professional"
+  original_date?: string
+  completed_at?: string | null
 }
-
 type DashboardGoal = {
   id: string
   title: string
@@ -318,7 +319,7 @@ export default function DashboardPage() {
       ).values()
     )
 
-    const routinesToInsert =
+ const routinesToInsert =
   uniqueTasks.map((task) => ({
     user_id: userId,
     title: task.title,
@@ -327,6 +328,8 @@ export default function DashboardPage() {
     category: task.category,
     completed: false,
     date: newDate,
+    original_date: newDate,
+    completed_at: null,
   }))
 
     await supabase
@@ -369,14 +372,14 @@ await ensureTodayRoutineTasks(user.id)
 const today = getLocalDate()
     const currentMonth = getMonthReference()
 
-    const { data: tasksData } = await supabase
-      .from("tasks")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("date", today)
-      .order("created_at", {
-        ascending: false,
-      })
+const { data: tasksData } = await supabase
+  .from("tasks")
+  .select("*")
+  .eq("user_id", user.id)
+  .eq("completed", false)
+  .order("created_at", {
+    ascending: false,
+  })
 
     const { data: goalsData } = await supabase
       .from("goals")
@@ -394,9 +397,18 @@ const today = getLocalDate()
       .eq("user_id", user.id)
       .maybeSingle()
 
-    setTasks(
-      (tasksData as DashboardTask[]) || []
-    )
+   const filteredTasks =
+  (tasksData || []).filter((task) => {
+    if (task.type === "routine") {
+      return task.date === today
+    }
+
+    return true
+  })
+
+setTasks(
+  filteredTasks as DashboardTask[]
+)
 
     setGoals(
       (goalsData as DashboardGoal[]) || []

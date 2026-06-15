@@ -226,23 +226,25 @@ export function TaskList({
         await deleteLink(existingLink.id)
       }
     } else {
-      const { data } = await supabase
-        .from("tasks")
-        .insert({
-          user_id: user.id,
-          category: taskCategory,
-          title: taskTitle.trim(),
-          emoji: taskEmoji,
-          type: taskType,
-          completed: false,
-          date: getLocalDate(),
-          scheduled_time: scheduledTime || null,
-          reminder_enabled: reminderEnabled,
-          reminder_minutes_before:
-            Number(reminderMinutes),
-          last_reminder_sent: null,
-          late_reminder_sent: null,
-        })
+     const { data } = await supabase
+  .from("tasks")
+  .insert({
+    user_id: user.id,
+    category: taskCategory,
+    title: taskTitle.trim(),
+    emoji: taskEmoji,
+    type: taskType,
+    completed: false,
+    date: getLocalDate(),
+    original_date: getLocalDate(),
+    completed_at: null,
+    scheduled_time: scheduledTime || null,
+    reminder_enabled: reminderEnabled,
+    reminder_minutes_before:
+      Number(reminderMinutes),
+    last_reminder_sent: null,
+    late_reminder_sent: null,
+  })
         .select()
         .single()
 
@@ -260,14 +262,28 @@ export function TaskList({
     await onTasksChanged()
 
     const { data: tasksData } = await supabase
-      .from("tasks")
-      .select("*")
-      .eq("date", getLocalDate())
-      .order("created_at", {
-        ascending: false,
-      })
+  .from("tasks")
+  .select("*")
+  .eq("user_id", user.id)
+  .eq("completed", false)
+  .order("created_at", {
+    ascending: false,
+  })
 
-    setTasks((tasksData as DashboardTask[]) || [])
+const filteredTasks =
+  (tasksData || []).filter((task) => {
+    if (task.type === "routine") {
+      return (
+        task.date === getLocalDate()
+      )
+    }
+
+    return true
+  })
+
+setTasks(
+  filteredTasks as DashboardTask[]
+)
 
     resetForm()
     setIsOpen(false)
@@ -300,11 +316,14 @@ export function TaskList({
     )
 
     await supabase
-      .from("tasks")
-      .update({
-        completed: nextStatus,
-      })
-      .eq("id", taskId)
+  .from("tasks")
+  .update({
+    completed: nextStatus,
+    completed_at: nextStatus
+      ? new Date().toISOString()
+      : null,
+  })
+  .eq("id", taskId)
 
     await applyTaskLinkProgress(
       taskId,
@@ -693,6 +712,24 @@ export function TaskList({
                         </Badge>
                       )}
 
+                    {task.type === "single" &&
+ task.original_date &&
+ (() => {
+   const diff = Math.floor(
+     (new Date().getTime() -
+       new Date(task.original_date).getTime()) /
+     (1000 * 60 * 60 * 24)
+   )
+
+   if (diff <= 0) return null
+
+   return (
+     <Badge variant="destructive">
+       ⚠️ {diff} dia{diff > 1 ? "s" : ""}
+     </Badge>
+   )
+ })()}
+
                       {task.scheduled_time && (
                         <Badge
                           variant="outline"
@@ -844,6 +881,23 @@ export function TaskList({
                           rotina
                         </Badge>
                       )}
+
+                      {task.type === "single" &&
+  task.original_date && (() => {
+    const diff = Math.floor(
+      (new Date().getTime() -
+        new Date(task.original_date).getTime()) /
+      (1000 * 60 * 60 * 24)
+    )
+
+    if (diff <= 0) return null
+
+    return (
+      <Badge variant="destructive">
+        ⚠️ {diff} dia{diff > 1 ? "s" : ""}
+      </Badge>
+    )
+  })()}
 
                       {task.scheduled_time && (
                         <Badge
