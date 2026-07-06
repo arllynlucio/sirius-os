@@ -1,11 +1,30 @@
 "use client"
 
 import Link from "next/link"
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Sun, Target, Flame, BarChart3, ArrowRight, CheckCircle2, Sparkles, Zap, TrendingUp, Calendar } from "lucide-react"
 
 export default function LandingPage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (session) {
+        router.replace("/dashboard")
+      }
+    }
+
+    checkSession()
+  }, [router])
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
