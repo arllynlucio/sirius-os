@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { getLocalDate } from "@/lib/date"
 
 import {
   Card,
@@ -51,10 +52,13 @@ export default function HistoryPage() {
 
     if (!user) return
 
+    const today = getLocalDate()
+
     const { data } = await supabase
       .from("checkins")
       .select("*")
       .eq("user_id", user.id)
+      .lt("checkin_date", today)
       .order("checkin_date", {
         ascending: false,
       })

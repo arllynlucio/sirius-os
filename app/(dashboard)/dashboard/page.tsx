@@ -26,6 +26,7 @@ export type DashboardTask = {
   original_date?: string
   completed_at?: string | null
 }
+
 type DashboardGoal = {
   id: string
   title: string
@@ -46,7 +47,6 @@ export default function DashboardPage() {
   } = useDashboard()
 
   const [loading, setLoading] = useState(true)
-
 
   const [currentDate, setCurrentDate] =
     useState(getLocalDate())
@@ -319,18 +319,29 @@ export default function DashboardPage() {
       ).values()
     )
 
- const routinesToInsert =
-  uniqueTasks.map((task) => ({
-    user_id: userId,
-    title: task.title,
-    emoji: task.emoji,
-    type: "routine",
-    category: task.category,
-    completed: false,
-    date: newDate,
-    original_date: newDate,
-    completed_at: null,
-  }))
+    const routinesToInsert =
+      uniqueTasks.map((task) => ({
+        user_id: userId,
+        title: task.title,
+        emoji: task.emoji,
+        type: "routine",
+        category: task.category,
+        completed: false,
+        date: newDate,
+        original_date: newDate,
+        completed_at: null,
+        scheduled_time: task.scheduled_time || null,
+        reminder_enabled: task.reminder_enabled || false,
+        reminder_minutes_before:
+          task.reminder_minutes_before || 15,
+        last_reminder_sent: null,
+        late_reminder_sent: null,
+        routine_days:
+          Array.isArray(task.routine_days) &&
+          task.routine_days.length > 0
+            ? task.routine_days
+            : [0, 1, 2, 3, 4, 5, 6],
+      }))
 
     await supabase
       .from("tasks")
@@ -338,48 +349,47 @@ export default function DashboardPage() {
   }
 
   const ensureTodayRoutineTasks = async (
-  userId: string
-) => {
-  const today = getLocalDate()
+    userId: string
+  ) => {
+    const today = getLocalDate()
 
-  const { data: todayRoutines } =
-    await supabase
-      .from("tasks")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("type", "routine")
-      .eq("date", today)
+    const { data: todayRoutines } =
+      await supabase
+        .from("tasks")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("type", "routine")
+        .eq("date", today)
 
-  if ((todayRoutines?.length || 0) > 0) {
-    return
+    if ((todayRoutines?.length || 0) > 0) {
+      return
+    }
+
+    await regenerateRoutineTasks(
+      userId,
+      today
+    )
   }
 
-  await regenerateRoutineTasks(
-    userId,
-    today
-  )
-}
-
   const loadDashboardData = async () => {
-   const {
-  data: { user },
-} = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-if (!user) return
+    if (!user) return
 
-await ensureTodayRoutineTasks(user.id)
+    await ensureTodayRoutineTasks(user.id)
 
-const today = getLocalDate()
+    const today = getLocalDate()
     const currentMonth = getMonthReference()
 
-const { data: tasksData } = await supabase
-  .from("tasks")
-  .select("*")
-  .eq("user_id", user.id)
-  .eq("completed", false)
-  .order("created_at", {
-    ascending: false,
-  })
+    const { data: tasksData } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", {
+        ascending: false,
+      })
 
     const { data: goalsData } = await supabase
       .from("goals")
@@ -397,18 +407,30 @@ const { data: tasksData } = await supabase
       .eq("user_id", user.id)
       .maybeSingle()
 
-   const filteredTasks =
-  (tasksData || []).filter((task) => {
-    if (task.type === "routine") {
-      return task.date === today
-    }
+    const todayWeekday = new Date(`${today}T12:00:00`).getDay()
 
-    return true
-  })
+    const filteredTasks =
+      (tasksData || []).filter((task) => {
+        if (task.type === "routine") {
+          if (task.date !== today) {
+            return false
+          }
 
-setTasks(
-  filteredTasks as DashboardTask[]
-)
+          const routineDays =
+            Array.isArray(task.routine_days) &&
+            task.routine_days.length > 0
+              ? task.routine_days
+              : [0, 1, 2, 3, 4, 5, 6]
+
+          return routineDays.includes(todayWeekday)
+        }
+
+        return true
+      })
+
+    setTasks(
+      filteredTasks as DashboardTask[]
+    )
 
     setGoals(
       (goalsData as DashboardGoal[]) || []
@@ -449,18 +471,17 @@ setTasks(
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-     <QuickStats
-  completedTasks={
-    tasks.filter((t) => t.completed)
-      .length
-  }
-  totalTasks={tasks.length}
-  activeGoals={activeGoals}
-  productiveDays={productiveDays}
-  currentStreak={currentStreak}
-/>
+      <QuickStats
+        completedTasks={
+          tasks.filter((t) => t.completed)
+            .length
+        }
+        totalTasks={tasks.length}
+        activeGoals={activeGoals}
+        productiveDays={productiveDays}
+        currentStreak={currentStreak}
+      />
 
-  
       <EnergySelector />
 
       <TaskList

@@ -64,29 +64,44 @@ export function EnergySelector() {
     const nextValue =
       selectedEnergy === energy ? null : energy
 
-    const { data: existingCheckin } = await supabase
-      .from("checkins")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("checkin_date", today)
-      .maybeSingle()
+   if (nextValue) {
+  const { error } = await supabase
+    .from("checkins")
+    .upsert(
+      {
+        user_id: user.id,
+        checkin_date: today,
+        energy: nextValue,
+      },
+      {
+        onConflict: "user_id,checkin_date",
+      }
+    )
 
-    if (existingCheckin) {
-      await supabase
-        .from("checkins")
-        .update({
-          energy: nextValue,
-        })
-        .eq("id", existingCheckin.id)
-    } else if (nextValue) {
-      await supabase
-        .from("checkins")
-        .insert({
-          user_id: user.id,
-          checkin_date: today,
-          energy: nextValue,
-        })
-    }
+  if (error) {
+    console.error(
+      "Erro ao salvar energia:",
+      error
+    )
+    return
+  }
+} else {
+  const { error } = await supabase
+    .from("checkins")
+    .update({
+      energy: null,
+    })
+    .eq("user_id", user.id)
+    .eq("checkin_date", today)
+
+  if (error) {
+    console.error(
+      "Erro ao remover energia:",
+      error
+    )
+    return
+  }
+}
 
     setSelectedEnergy(nextValue)
   }

@@ -60,6 +60,18 @@ const emojiOptions = [
   "🔫",
 ]
 
+const routineWeekDays = [
+  { value: 1, label: "SEG" },
+  { value: 2, label: "TER" },
+  { value: 3, label: "QUA" },
+  { value: 4, label: "QUI" },
+  { value: 5, label: "SEX" },
+  { value: 6, label: "SÁB" },
+  { value: 0, label: "DOM" },
+]
+
+const allRoutineDays = [0, 1, 2, 3, 4, 5, 6]
+
 type TaskListProps = {
   tasks: DashboardTask[]
   setTasks: React.Dispatch<React.SetStateAction<DashboardTask[]>>
@@ -99,7 +111,10 @@ export function TaskList({
   const [taskType, setTaskType] =
     useState<"single" | "routine">("single")
 
-    const [taskCategory, setTaskCategory] =
+  const [routineDays, setRoutineDays] =
+    useState<number[]>(allRoutineDays)
+
+  const [taskCategory, setTaskCategory] =
   useState<"personal" | "professional">(
     "personal"
   )
@@ -127,6 +142,7 @@ export function TaskList({
     setTaskEmoji("📚")
     setTaskTitle("")
     setTaskType("single")
+    setRoutineDays([...allRoutineDays])
     setTaskCategory("personal")
     setScheduledTime("")
     setReminderEnabled(false)
@@ -158,9 +174,21 @@ export function TaskList({
     setTaskEmoji(data.emoji)
     setTaskTitle(data.title)
     setTaskType(data.type)
+
+    if (data.type === "routine") {
+      setRoutineDays(
+        Array.isArray(data.routine_days) &&
+          data.routine_days.length > 0
+          ? data.routine_days
+          : [...allRoutineDays]
+      )
+    } else {
+      setRoutineDays([...allRoutineDays])
+    }
+
     setTaskCategory(
-  data.category || "personal"
-)
+      data.category || "personal"
+    )
     setScheduledTime(data.scheduled_time || "")
     setReminderEnabled(data.reminder_enabled || false)
 
@@ -184,6 +212,12 @@ export function TaskList({
   const handleSaveTask = async () => {
     if (!taskTitle.trim()) return
     if (linkGoalEnabled && !selectedGoalId) return
+    if (taskType === "routine" && routineDays.length === 0) return
+
+    const savedRoutineDays =
+      taskType === "routine"
+        ? [...routineDays]
+        : [...allRoutineDays]
 
     const {
       data: { user },
@@ -198,6 +232,7 @@ export function TaskList({
           title: taskTitle.trim(),
           emoji: taskEmoji,
           type: taskType,
+          routine_days: savedRoutineDays,
           category: taskCategory,
           scheduled_time: scheduledTime || null,
           reminder_enabled: reminderEnabled,
@@ -234,6 +269,7 @@ export function TaskList({
     title: taskTitle.trim(),
     emoji: taskEmoji,
     type: taskType,
+    routine_days: savedRoutineDays,
     completed: false,
     date: getLocalDate(),
     original_date: getLocalDate(),
@@ -265,7 +301,6 @@ export function TaskList({
   .from("tasks")
   .select("*")
   .eq("user_id", user.id)
-  .eq("completed", false)
   .order("created_at", {
     ascending: false,
   })
@@ -499,9 +534,62 @@ setTasks(
                       "bg-primary text-white"
                   )}
                 >
-                  Rotina diária
+                  Rotina
                 </button>
               </div>
+
+              {taskType === "routine" && (
+                <div className="space-y-3 rounded-xl border p-4">
+                  <div>
+                    <Label>Dias da semana</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Escolha em quais dias esta rotina deve aparecer.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {routineWeekDays.map((day) => {
+                      const selected = routineDays.includes(
+                        day.value
+                      )
+
+                      return (
+                        <button
+                          key={day.value}
+                          type="button"
+                          onClick={() => {
+                            setRoutineDays((current) =>
+                              current.includes(day.value)
+                                ? current.filter(
+                                    (value) => value !== day.value
+                                  )
+                                : [...current, day.value]
+                            )
+                          }}
+                          className={cn(
+                            "rounded-lg border px-1 py-2 text-xs font-semibold transition-colors",
+                            selected
+                              ? "border-primary bg-primary text-white"
+                              : "border-border bg-background text-muted-foreground"
+                          )}
+                        >
+                          {day.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    {routineDays.length === 7
+                      ? "Todos os dias"
+                      : routineDays.length === 0
+                        ? "Selecione pelo menos um dia"
+                        : `${routineDays.length} dia${
+                            routineDays.length > 1 ? "s" : ""
+                          } por semana`}
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-3 rounded-xl border p-4">
                 <div className="flex items-center gap-2">

@@ -96,34 +96,48 @@ export function ProductivityRating({
     const completedGoals =
       goalsData?.length || 0
 
-    const { data: existingCheckin } =
-      await supabase
-        .from("checkins")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("checkin_date", today)
-        .maybeSingle()
+    if (nextValue) {
+  const { error } = await supabase
+    .from("checkins")
+    .upsert(
+      {
+        user_id: user.id,
+        checkin_date: today,
+        productivity: nextValue,
+        completed_tasks: completedTasks,
+        completed_goals: completedGoals,
+      },
+      {
+        onConflict: "user_id,checkin_date",
+      }
+    )
 
-    if (existingCheckin) {
-      await supabase
-        .from("checkins")
-        .update({
-          productivity: nextValue,
-          completed_tasks: completedTasks,
-          completed_goals: completedGoals,
-        })
-        .eq("id", existingCheckin.id)
-    } else if (nextValue) {
-      await supabase
-        .from("checkins")
-        .insert({
-          user_id: user.id,
-          checkin_date: today,
-          productivity: nextValue,
-          completed_tasks: completedTasks,
-          completed_goals: completedGoals,
-        })
-    }
+  if (error) {
+    console.error(
+      "Erro ao salvar produtividade:",
+      error
+    )
+    return
+  }
+} else {
+  const { error } = await supabase
+    .from("checkins")
+    .update({
+      productivity: null,
+      completed_tasks: completedTasks,
+      completed_goals: completedGoals,
+    })
+    .eq("user_id", user.id)
+    .eq("checkin_date", today)
+
+  if (error) {
+    console.error(
+      "Erro ao remover produtividade:",
+      error
+    )
+    return
+  }
+}
 
     setSelectedProductivity(nextValue)
 
