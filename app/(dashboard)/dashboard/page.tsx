@@ -27,6 +27,7 @@ export type DashboardTask = {
   completed_at?: string | null
   date?: string
   routine_days?: number[] | null
+  routine_deleted?: boolean
 }
 
 type DashboardGoal = {
@@ -297,12 +298,13 @@ export default function DashboardPage() {
     const { data: routineTasks, error: routineError } = await supabase
       .from("tasks").select("*").eq("user_id", userId)
       .eq("type", "routine")
+      .eq("routine_deleted", false)
       .order("date", { ascending: false })
     if (routineError || !routineTasks?.length) return
 
     const { data: todayRoutines, error: todayError } = await supabase
       .from("tasks").select("title, emoji").eq("user_id", userId)
-      .eq("type", "routine").eq("date", newDate)
+      .eq("type", "routine").eq("routine_deleted", false).eq("date", newDate)
     if (todayError) return
 
     const existingKeys = new Set((todayRoutines || []).map(
@@ -378,6 +380,7 @@ export default function DashboardPage() {
 
     const filteredTasks = (tasksData || []).filter((task) => {
       if (task.type === "routine") {
+        if (task.routine_deleted) return false
         if (task.date !== today) return false
         const routineDays = Array.isArray(task.routine_days) && task.routine_days.length
           ? task.routine_days : [0, 1, 2, 3, 4, 5, 6]

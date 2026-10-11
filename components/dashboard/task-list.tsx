@@ -493,21 +493,57 @@ setTasks(
   }
 
   const removeTask = async (taskId: string) => {
-    const existingLink =
-      getTaskLinks(taskId)[0]
+    const taskToRemove = tasks.find((task) => task.id === taskId)
+    if (!taskToRemove) return
 
-    if (existingLink) {
-      await deleteLink(existingLink.id)
+    if (taskToRemove.type === "routine") {
+      // Rotinas são desativadas, não apagadas fisicamente: isso preserva
+      // o histórico de ocorrências concluídas e impede a regeneração futura.
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const { error } = await supabase
+        .from("tasks")
+        .update({ routine_deleted: true })
+        .eq("user_id", user.id)
+        .eq("type", "routine")
+        .eq("title", taskToRemove.title)
+        .eq("emoji", taskToRemove.emoji)
+
+      if (error) {
+        console.error("Erro ao excluir rotina:", error)
+        return
+      }
+
+      setTasks((prev) =>
+        prev.filter(
+          (task) =>
+            !(task.type === "routine" &&
+              task.title === taskToRemove.title &&
+              task.emoji === taskToRemove.emoji)
+        )
+      )
+    } else {
+      const existingLink = getTaskLinks(taskId)[0]
+      if (existingLink) {
+        await deleteLink(existingLink.id)
+      }
+
+      const { error } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("id", taskId)
+
+      if (error) {
+        console.error("Erro ao excluir tarefa:", error)
+        return
+      }
+
+      setTasks((prev) => prev.filter((task) => task.id !== taskId))
     }
-
-    await supabase
-      .from("tasks")
-      .delete()
-      .eq("id", taskId)
-
-    setTasks((prev) =>
-      prev.filter((task) => task.id !== taskId)
-    )
 
     await onTasksChanged()
   }
