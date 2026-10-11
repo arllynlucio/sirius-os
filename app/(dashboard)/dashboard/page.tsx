@@ -25,6 +25,8 @@ export type DashboardTask = {
   category?: "personal" | "professional"
   original_date?: string
   completed_at?: string | null
+  date?: string
+  routine_days?: number[] | null
 }
 
 type DashboardGoal = {
@@ -70,15 +72,18 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const now = getLocalDate()
-
-      if (now !== currentDate) {
-        handleDayChange(now)
-      }
-    }, 60000)
-
-    return () => clearInterval(interval)
+    const checkLocalDate = () => {
+      const localDate = getLocalDate()
+      if (localDate !== currentDate) void handleDayChange(localDate)
+    }
+    const interval = setInterval(checkLocalDate, 10000)
+    window.addEventListener("focus", checkLocalDate)
+    document.addEventListener("visibilitychange", checkLocalDate)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener("focus", checkLocalDate)
+      document.removeEventListener("visibilitychange", checkLocalDate)
+    }
   }, [currentDate])
 
   const checkAuth = async () => {
@@ -278,97 +283,59 @@ export default function DashboardPage() {
     triggerRefresh()
   }
 
-  const handleDayChange = async (
-    newDate: string
-  ) => {
+  const handleDayChange = async (newDate: string) => {
     setCurrentDate(newDate)
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
-    await regenerateRoutineTasks(
-      user.id,
-      newDate
-    )
-
+    await ensureTodayRoutineTasks(user.id)
     await loadDashboardData()
   }
 
-  const regenerateRoutineTasks = async (
-    userId: string,
-    newDate: string
-  ) => {
-    const { data: routineTasks } = await supabase
-      .from("tasks")
-      .select("*")
-      .eq("user_id", userId)
+  const regenerateRoutineTasks = async (userId: string, newDate: string) => {
+    if (newDate !== getLocalDate()) return
+    const targetWeekday = new Date(`${newDate}T12:00:00`).getDay()
+    const { data: routineTasks, error: routineError } = await supabase
+      .from("tasks").select("*").eq("user_id", userId)
       .eq("type", "routine")
-      .neq("date", newDate)
+      .order("date", { ascending: false })
+    if (routineError || !routineTasks?.length) return
 
-    if (!routineTasks?.length) return
+    const { data: todayRoutines, error: todayError } = await supabase
+      .from("tasks").select("title, emoji").eq("user_id", userId)
+      .eq("type", "routine").eq("date", newDate)
+    if (todayError) return
 
-    const uniqueTasks = Array.from(
-      new Map(
-        routineTasks.map((task) => [
-          `${task.title}-${task.emoji}`,
-          task,
-        ])
-      ).values()
-    )
-
-    const routinesToInsert =
-      uniqueTasks.map((task) => ({
-        user_id: userId,
-        title: task.title,
-        emoji: task.emoji,
-        type: "routine",
-        category: task.category,
-        completed: false,
-        date: newDate,
-        original_date: newDate,
-        completed_at: null,
-        scheduled_time: task.scheduled_time || null,
-        reminder_enabled: task.reminder_enabled || false,
-        reminder_minutes_before:
-          task.reminder_minutes_before || 15,
-        last_reminder_sent: null,
-        late_reminder_sent: null,
-        routine_days:
-          Array.isArray(task.routine_days) &&
-          task.routine_days.length > 0
-            ? task.routine_days
-            : [0, 1, 2, 3, 4, 5, 6],
-      }))
-
-    await supabase
-      .from("tasks")
-      .insert(routinesToInsert)
-  }
-
-  const ensureTodayRoutineTasks = async (
-    userId: string
-  ) => {
-    const today = getLocalDate()
-
-    const { data: todayRoutines } =
-      await supabase
-        .from("tasks")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("type", "routine")
-        .eq("date", today)
-
-    if ((todayRoutines?.length || 0) > 0) {
-      return
+    const existingKeys = new Set((todayRoutines || []).map(
+      (task) => `${task.title}::${task.emoji}`
+    ))
+    const latestTemplates = new Map<string, any>()
+    for (const task of routineTasks) {
+      const key = `${task.title}::${task.emoji}`
+      if (!latestTemplates.has(key)) latestTemplates.set(key, task)
     }
 
-    await regenerateRoutineTasks(
-      userId,
-      today
-    )
+    const routinesToInsert = Array.from(latestTemplates.entries())
+      .filter(([key, task]) => {
+        const days = Array.isArray(task.routine_days) && task.routine_days.length
+          ? task.routine_days : [0, 1, 2, 3, 4, 5, 6]
+        return !existingKeys.has(key) && days.includes(targetWeekday)
+      })
+      .map(([, task]) => ({
+        user_id: userId, title: task.title, emoji: task.emoji,
+        type: "routine", category: task.category, completed: false,
+        date: newDate, original_date: newDate, completed_at: null,
+        scheduled_time: task.scheduled_time || null,
+        reminder_enabled: task.reminder_enabled || false,
+        reminder_minutes_before: task.reminder_minutes_before || 15,
+        last_reminder_sent: null, late_reminder_sent: null,
+        routine_days: Array.isArray(task.routine_days) && task.routine_days.length
+          ? task.routine_days : [0, 1, 2, 3, 4, 5, 6],
+      }))
+    if (routinesToInsert.length) await supabase.from("tasks").insert(routinesToInsert)
+  }
+
+  const ensureTodayRoutineTasks = async (userId: string) => {
+    await regenerateRoutineTasks(userId, getLocalDate())
   }
 
   const loadDashboardData = async () => {
@@ -409,24 +376,33 @@ export default function DashboardPage() {
 
     const todayWeekday = new Date(`${today}T12:00:00`).getDay()
 
-    const filteredTasks =
-      (tasksData || []).filter((task) => {
-        if (task.type === "routine") {
-          if (task.date !== today) {
-            return false
-          }
+    const filteredTasks = (tasksData || []).filter((task) => {
+      if (task.type === "routine") {
+        if (task.date !== today) return false
+        const routineDays = Array.isArray(task.routine_days) && task.routine_days.length
+          ? task.routine_days : [0, 1, 2, 3, 4, 5, 6]
+        return routineDays.includes(todayWeekday)
+      }
+      // Tarefas concluídas devem ser agrupadas pela data local da conclusão,
+      // não pela data original da tarefa. Isso mantém tarefas atrasadas concluídas
+      // hoje visíveis até a virada do dia.
+      if (task.completed) {
+        const completionDate = task.completed_at
+          ? (() => {
+              const completedAt = new Date(task.completed_at)
+              const year = completedAt.getFullYear()
+              const month = String(completedAt.getMonth() + 1).padStart(2, "0")
+              const day = String(completedAt.getDate()).padStart(2, "0")
+              return `${year}-${month}-${day}`
+            })()
+          : task.date
 
-          const routineDays =
-            Array.isArray(task.routine_days) &&
-            task.routine_days.length > 0
-              ? task.routine_days
-              : [0, 1, 2, 3, 4, 5, 6]
+        if (completionDate !== today) return false
+      }
 
-          return routineDays.includes(todayWeekday)
-        }
-
-        return true
-      })
+      // Tarefas pendentes antigas continuam visíveis para que possam ser concluídas.
+      return true
+    })
 
     setTasks(
       filteredTasks as DashboardTask[]

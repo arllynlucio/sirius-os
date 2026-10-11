@@ -3,19 +3,8 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { getLocalDate } from "@/lib/date"
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-
-import {
-  Calendar,
-  TrendingUp,
-  CheckCircle2,
-} from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Calendar, TrendingUp, CheckCircle2 } from "lucide-react"
 
 type Checkin = {
   id: string
@@ -25,13 +14,13 @@ type Checkin = {
   completed_tasks: number | null
   completed_goals: number | null
 }
+type TaskDay = { date: string | null; completed: boolean; completed_at: string | null }
 
 const productivityLabels = {
   weak: "📉 Fraco",
   normal: "📊 Normal",
   great: "🚀 Muito produtivo",
 }
-
 const energyLabels = {
   low: "😴 Baixa",
   medium: "🙂 Média",
@@ -41,167 +30,120 @@ const energyLabels = {
 export default function HistoryPage() {
   const [history, setHistory] = useState<Checkin[]>([])
 
-  useEffect(() => {
-    loadHistory()
-  }, [])
+  useEffect(() => { void loadHistory() }, [])
 
-  const loadHistory = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return
-
-    const today = getLocalDate()
-
-    const { data } = await supabase
-      .from("checkins")
-      .select("*")
-      .eq("user_id", user.id)
-      .lt("checkin_date", today)
-      .order("checkin_date", {
-        ascending: false,
-      })
-
-    if (data) {
-      setHistory(data)
-    }
+  const getLocalDateFromTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
   }
 
-  const excellentDays = history.filter(
-    (h) => h.productivity === "great"
-  ).length
+  const loadHistory = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const today = getLocalDate()
 
-  const avgTasks =
-    history.length > 0
-      ? Math.round(
-          history.reduce(
-            (acc, h) =>
-              acc + (h.completed_tasks || 0),
-            0
-          ) / history.length
-        )
-      : 0
+    const [
+      { data: checkins, error: checkinsError },
+      { data: tasks, error: tasksError },
+    ] = await Promise.all([
+      supabase.from("checkins").select("*").eq("user_id", user.id)
+        .lt("checkin_date", today).order("checkin_date", { ascending: false }),
+      supabase.from("tasks").select("date, completed, completed_at").eq("user_id", user.id)
+        .lt("date", today),
+    ])
+    if (checkinsError) console.error("Erro ao carregar check-ins:", checkinsError)
+    if (tasksError) console.error("Erro ao carregar tarefas do histórico:", tasksError)
+
+    const completedByDate = new Map<string, number>()
+    const taskDates = new Set<string>()
+    ;((tasks || []) as TaskDay[]).forEach((task) => {
+      if (!task.completed) return
+      // Preferimos a data local em que a tarefa foi concluída.
+      // Registros antigos sem completed_at usam a data da própria tarefa.
+      const completionDate = task.completed_at
+        ? getLocalDateFromTimestamp(task.completed_at)
+        : task.date
+      if (!completionDate) return
+      taskDates.add(completionDate)
+      completedByDate.set(
+        completionDate,
+        (completedByDate.get(completionDate) || 0) + 1
+      )
+    })
+
+    const checkinByDate = new Map<string, Checkin>()
+    ;((checkins || []) as Checkin[]).forEach((record) =>
+      checkinByDate.set(record.checkin_date, record)
+    )
+
+    const allDates = new Set([...checkinByDate.keys(), ...taskDates])
+    setHistory(Array.from(allDates).filter((date) => date < today)
+      .sort((a, b) => b.localeCompare(a))
+      .map((date) => {
+        const existing = checkinByDate.get(date)
+        return {
+          id: existing?.id || `tasks-${date}`,
+          checkin_date: date,
+          energy: existing?.energy ?? null,
+          productivity: existing?.productivity ?? null,
+          completed_tasks: taskDates.has(date)
+            ? (completedByDate.get(date) || 0)
+            : (existing?.completed_tasks ?? 0),
+          completed_goals: existing?.completed_goals ?? 0,
+        }
+      }))
+  }
+
+  const excellentDays = history.filter((h) => h.productivity === "great").length
+  const avgTasks = history.length > 0
+    ? Math.round(history.reduce((acc, h) => acc + (h.completed_tasks || 0), 0) / history.length)
+    : 0
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          Histórico
-        </h1>
-
-        <p className="text-sm text-muted-foreground">
-          Sua evolução real registrada
-        </p>
+        <h1 className="text-2xl font-bold text-foreground">Histórico</h1>
+        <p className="text-sm text-muted-foreground">Sua evolução real registrada</p>
       </div>
-
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center gap-4 p-4">
-            <Calendar className="h-6 w-6" />
-
-            <div>
-              <p className="text-2xl font-bold">
-                {history.length}
-              </p>
-
-              <p className="text-xs text-muted-foreground">
-                Dias registrados
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center gap-4 p-4">
-            <TrendingUp className="h-6 w-6" />
-
-            <div>
-              <p className="text-2xl font-bold">
-                {excellentDays}
-              </p>
-
-              <p className="text-xs text-muted-foreground">
-                Dias excelentes
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center gap-4 p-4">
-            <CheckCircle2 className="h-6 w-6" />
-
-            <div>
-              <p className="text-2xl font-bold">
-                {avgTasks}
-              </p>
-
-              <p className="text-xs text-muted-foreground">
-                Média tarefas/dia
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="flex items-center gap-4 p-4">
+          <Calendar className="h-6 w-6" /><div>
+            <p className="text-2xl font-bold">{history.length}</p>
+            <p className="text-xs text-muted-foreground">Dias registrados</p>
+          </div>
+        </CardContent></Card>
+        <Card><CardContent className="flex items-center gap-4 p-4">
+          <TrendingUp className="h-6 w-6" /><div>
+            <p className="text-2xl font-bold">{excellentDays}</p>
+            <p className="text-xs text-muted-foreground">Dias excelentes</p>
+          </div>
+        </CardContent></Card>
+        <Card><CardContent className="flex items-center gap-4 p-4">
+          <CheckCircle2 className="h-6 w-6" /><div>
+            <p className="text-2xl font-bold">{avgTasks}</p>
+            <p className="text-xs text-muted-foreground">Média tarefas/dia</p>
+          </div>
+        </CardContent></Card>
       </div>
-
       <Card>
-        <CardHeader>
-          <CardTitle>
-            Registros reais
-          </CardTitle>
-        </CardHeader>
-
+        <CardHeader><CardTitle>Registros reais</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhum histórico ainda.
-            </p>
-          ) : (
-            history.map((record) => (
-              <div
-                key={record.id}
-                className="rounded-xl border border-border p-4"
-              >
-                <p className="font-semibold">
-                  {record.checkin_date
-                    .split("-")
-                    .reverse()
-                    .join("/")}
-                </p>
-
-                <div className="mt-2 flex flex-col gap-2 text-sm">
-                  <span>
-                    Energia:{" "}
-                    {record.energy
-                      ? energyLabels[
-                          record.energy as keyof typeof energyLabels
-                        ]
-                      : "-"}
-                  </span>
-
-                  <span>
-                    Produtividade:{" "}
-                    {record.productivity
-                      ? productivityLabels[
-                          record.productivity as keyof typeof productivityLabels
-                        ]
-                      : "-"}
-                  </span>
-
-                  <span>
-                    Tarefas:{" "}
-                    {record.completed_tasks || 0}
-                  </span>
-
-                  <span>
-                    Metas:{" "}
-                    {record.completed_goals || 0}
-                  </span>
-                </div>
+            <p className="text-sm text-muted-foreground">Nenhum histórico ainda.</p>
+          ) : history.map((record) => (
+            <div key={record.id} className="rounded-xl border border-border p-4">
+              <p className="font-semibold">{record.checkin_date.split("-").reverse().join("/")}</p>
+              <div className="mt-2 flex flex-col gap-2 text-sm">
+                <span>Energia: {record.energy ? energyLabels[record.energy as keyof typeof energyLabels] : "-"}</span>
+                <span>Produtividade: {record.productivity ? productivityLabels[record.productivity as keyof typeof productivityLabels] : "-"}</span>
+                <span>Tarefas: {record.completed_tasks || 0}</span>
+                <span>Metas: {record.completed_goals || 0}</span>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </CardContent>
       </Card>
     </div>

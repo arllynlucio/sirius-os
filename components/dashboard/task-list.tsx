@@ -138,6 +138,52 @@ export function TaskList({
     (t) => t.completed
   ).length
 
+  const getLocalDateFromTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  }
+
+  const syncDailyCompletedTaskCount = async (
+    userId: string,
+    taskDate: string
+  ) => {
+    const { data: completedTasks, error } = await supabase
+      .from("tasks")
+      .select("date, completed_at")
+      .eq("user_id", userId)
+      .eq("completed", true)
+
+    if (error) {
+      console.error("Não foi possível calcular as tarefas do dia:", error)
+      return
+    }
+
+    const completedCount = (completedTasks || []).filter((task) => {
+      const completionDate = task.completed_at
+        ? getLocalDateFromTimestamp(task.completed_at)
+        : task.date
+      return completionDate === taskDate
+    }).length
+
+    const { error: checkinError } = await supabase
+      .from("checkins")
+      .upsert(
+        {
+          user_id: userId,
+          checkin_date: taskDate,
+          completed_tasks: completedCount,
+        },
+        { onConflict: "user_id,checkin_date" }
+      )
+
+    if (checkinError) {
+      console.error("Não foi possível atualizar o histórico diário:", checkinError)
+    }
+  }
+
   const resetForm = () => {
     setTaskEmoji("📚")
     setTaskTitle("")
@@ -305,14 +351,34 @@ export function TaskList({
     ascending: false,
   })
 
+const today = getLocalDate()
+const todayWeekday = new Date(`${today}T12:00:00`).getDay()
+
 const filteredTasks =
   (tasksData || []).filter((task) => {
     if (task.type === "routine") {
-      return (
-        task.date === getLocalDate()
-      )
+      if (task.date !== today) return false
+
+      const routineDays =
+        Array.isArray(task.routine_days) && task.routine_days.length
+          ? task.routine_days
+          : [0, 1, 2, 3, 4, 5, 6]
+
+      return routineDays.includes(todayWeekday)
     }
 
+    // Mantém tarefas concluídas visíveis somente no dia da conclusão.
+    // Isso mantém a lista consistente com o filtro do Dashboard após criar/editar tarefas.
+    // Para tarefas antigas sem completed_at, usa task.date como fallback.
+    if (task.completed) {
+      const completionDate = task.completed_at
+        ? getLocalDateFromTimestamp(task.completed_at)
+        : task.date
+
+      if (completionDate !== today) return false
+    }
+
+    // Tarefas pendentes de dias anteriores continuam visíveis.
     return true
   })
 
@@ -339,26 +405,54 @@ setTasks(
       (g) => g.id === link?.goal_id
     )
 
+    // Use o mesmo instante no estado local e no Supabase para manter
+    // a data de conclusão consistente durante os recarregamentos da lista.
+    const completionTimestamp = nextStatus
+      ? new Date().toISOString()
+      : null
+
     setTasks((prev) =>
       prev.map((task) =>
         task.id === taskId
           ? {
               ...task,
               completed: nextStatus,
+              completed_at: completionTimestamp,
             }
           : task
       )
     )
 
-    await supabase
-  .from("tasks")
-  .update({
-    completed: nextStatus,
-    completed_at: nextStatus
-      ? new Date().toISOString()
-      : null,
-  })
-  .eq("id", taskId)
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error: updateError } = await supabase
+      .from("tasks")
+      .update({
+        completed: nextStatus,
+        completed_at: completionTimestamp,
+      })
+      .eq("id", taskId)
+
+    if (updateError) {
+      console.error("Não foi possível atualizar a tarefa:", updateError)
+      setTasks((prev) => prev.map((task) =>
+        task.id === taskId ? { ...task, completed: currentStatus } : task
+      ))
+      return
+    }
+
+    if (user) {
+      const today = getLocalDate()
+      await syncDailyCompletedTaskCount(user.id, today)
+
+      if (!nextStatus && currentTask?.completed_at) {
+        const previousCompletionDate = getLocalDateFromTimestamp(
+          currentTask.completed_at
+        )
+        if (previousCompletionDate !== today) {
+          await syncDailyCompletedTaskCount(user.id, previousCompletionDate)
+        }
+      }
+    }
 
     await applyTaskLinkProgress(
       taskId,
